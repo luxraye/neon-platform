@@ -1,6 +1,7 @@
 "use client";
 
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import { useEffect, useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
@@ -202,7 +203,14 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       >
         <div className="flex h-14 items-center gap-2 border-b border-border px-4">
           {logoUrl ? (
-            <img src={logoUrl} alt="" className="h-8 w-8 rounded object-contain" />
+            <Image
+              src={logoUrl}
+              alt="Institution logo"
+              width={32}
+              height={32}
+              unoptimized
+              className="h-8 w-8 rounded object-contain"
+            />
           ) : null}
           <div className="min-w-0">
             <div className="truncate text-sm font-medium">{institutionName}</div>
