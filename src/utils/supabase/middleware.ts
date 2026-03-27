@@ -2,16 +2,6 @@ import { NextRequest, NextResponse } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 import { SESSION_LOCK_COOKIE } from "@/lib/session-lock";
 
-type MiddlewareCookieOptions = {
-  domain?: string;
-  path?: string;
-  secure?: boolean;
-  httpOnly?: boolean;
-  sameSite?: "lax" | "strict" | "none";
-  maxAge?: number;
-  expires?: Date;
-};
-
 const supabaseUrl = process.env.NEXT_PUBLIC_SUPABASE_URL!;
 const supabaseAnonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!;
 
@@ -33,13 +23,7 @@ export async function updateSession(request: NextRequest) {
       getAll() {
         return request.cookies.getAll();
       },
-      setAll(
-        cookiesToSet: Array<{
-          name: string;
-          value: string;
-          options: MiddlewareCookieOptions;
-        }>
-      ) {
+      setAll(cookiesToSet) {
         cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
         response = NextResponse.next({
           request: {
