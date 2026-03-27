@@ -22,7 +22,7 @@ if (!supabaseUrl || !supabaseAnonKey) {
 }
 
 export async function updateSession(request: NextRequest) {
-  const response = NextResponse.next({
+  let response = NextResponse.next({
     request: {
       headers: request.headers,
     },
@@ -30,23 +30,25 @@ export async function updateSession(request: NextRequest) {
 
   const supabase = createServerClient(supabaseUrl, supabaseAnonKey, {
     cookies: {
-      get(name: string) {
-        return request.cookies.get(name)?.value;
+      getAll() {
+        return request.cookies.getAll();
       },
-      set(name: string, value: string, options: MiddlewareCookieOptions) {
-        response.cookies.set({
-          name,
-          value,
-          ...options,
+      setAll(
+        cookiesToSet: Array<{
+          name: string;
+          value: string;
+          options: MiddlewareCookieOptions;
+        }>
+      ) {
+        cookiesToSet.forEach(({ name, value }) => request.cookies.set(name, value));
+        response = NextResponse.next({
+          request: {
+            headers: request.headers,
+          },
         });
-      },
-      remove(name: string, options: MiddlewareCookieOptions) {
-        response.cookies.set({
-          name,
-          value: "",
-          ...options,
-          maxAge: 0,
-        });
+        cookiesToSet.forEach(({ name, value, options }) =>
+          response.cookies.set({ name, value, ...options })
+        );
       },
     },
   });
