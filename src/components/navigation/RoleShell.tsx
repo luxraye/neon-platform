@@ -38,17 +38,19 @@ export function RoleShell<P extends object = Record<string, never>>({
   const BrandMark = (
     <div className="flex items-center gap-2 min-w-0">
       {logoUrl ? (
-        <Image
-          src={logoUrl}
-          alt="Institution logo"
-          width={28}
-          height={28}
-          unoptimized
-          className="h-7 w-7 rounded object-contain border border-border bg-white"
-        />
+        <div className="h-11 w-11 shrink-0 rounded-xl border border-border/70 bg-card p-1 shadow-sm">
+          <Image
+            src={logoUrl}
+            alt="Institution logo"
+            width={40}
+            height={40}
+            unoptimized
+            className="h-full w-full rounded-lg object-cover"
+          />
+        </div>
       ) : (
         <div
-          className="h-7 w-7 rounded text-white text-[10px] font-semibold flex items-center justify-center"
+          className="h-11 w-11 shrink-0 rounded-xl text-white text-sm font-semibold flex items-center justify-center shadow-sm"
           style={{ backgroundColor: "var(--brand-primary)" }}
           aria-hidden
         >

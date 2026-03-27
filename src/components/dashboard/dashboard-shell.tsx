@@ -204,19 +204,21 @@ export function DashboardShell({ children }: { children: React.ReactNode }) {
       <aside
         className="flex flex-col border-r border-border bg-card w-56 shrink-0"
       >
-        <div className="flex h-14 items-center gap-2 border-b border-border px-4">
+        <div className="flex h-16 items-center gap-3 border-b border-border px-4">
           {logoUrl ? (
-            <Image
-              src={logoUrl}
-              alt="Institution logo"
-              width={32}
-              height={32}
-              unoptimized
-              className="h-8 w-8 rounded object-contain"
-            />
+            <div className="h-11 w-11 shrink-0 rounded-xl border border-border/70 bg-card p-1 shadow-sm">
+              <Image
+                src={logoUrl}
+                alt="Institution logo"
+                width={40}
+                height={40}
+                unoptimized
+                className="h-full w-full rounded-lg object-cover"
+              />
+            </div>
           ) : null}
           <div className="min-w-0">
-            <div className="truncate text-sm font-medium">{institutionName}</div>
+            <div className="truncate text-base font-semibold">{institutionName}</div>
             {role === "student" ? (
               <div className="truncate text-xs text-muted-foreground">
                 {cohortName ? `Cohort: ${cohortName}` : "Cohort: —"}
