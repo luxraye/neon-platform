@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import Link from "next/link";
+import { usePathname } from "next/navigation";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useProfile } from "@/hooks/use-profile";
@@ -61,6 +63,7 @@ function usePostAuthors(postIds: string[]) {
 }
 
 export default function CommunityPage() {
+  const pathname = usePathname() ?? "";
   const queryClient = useQueryClient();
   const { data: profileData } = useProfile();
   const role =
@@ -89,6 +92,13 @@ export default function CommunityPage() {
   const [title, setTitle] = useState("");
   const [content, setContent] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const communityBasePath = pathname.startsWith("/student")
+    ? "/student/community"
+    : pathname.startsWith("/tutor")
+      ? "/tutor/community"
+      : pathname.startsWith("/headmaster")
+        ? "/headmaster/community"
+        : "/dashboard/community";
 
   if (studentBlocked) {
     return (
@@ -220,7 +230,7 @@ export default function CommunityPage() {
                 <CardContent className="px-4 sm:px-6">
                   <p className="text-sm whitespace-pre-wrap">{post.content}</p>
                   <Button variant="ghost" size="sm" className="mt-2 min-h-10" asChild>
-                    <a href={`/dashboard/community/${post.id}`}>View & reply</a>
+                    <Link href={`${communityBasePath}/${post.id}`}>View & reply</Link>
                   </Button>
                 </CardContent>
               </Card>

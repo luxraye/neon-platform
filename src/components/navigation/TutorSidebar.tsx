@@ -10,6 +10,7 @@ const items = [
   { href: "/tutor", label: "Overview" },
   { href: "/tutor/cohorts", label: "Cohorts" },
   { href: "/tutor/subjects", label: "Subjects" },
+  { href: "/tutor/timetable", label: "Timetable" },
   { href: "/tutor/quizzes", label: "Quizzes" },
   { href: "/tutor/results", label: "Results" },
   { href: "/tutor/attendance", label: "Attendance" },
@@ -32,7 +33,7 @@ export default function TutorSidebar({ institutionName }: TutorSidebarProps) {
       ) : null}
       <nav className="p-2 space-y-1 flex-1">
         {items.map((i) => {
-          const active = pathname === i.href;
+          const active = i.href === "/tutor" ? pathname === i.href : pathname.startsWith(`${i.href}/`) || pathname === i.href;
           return (
             <Link
               key={i.href}

@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { useParams } from "next/navigation";
+import { useParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
@@ -108,8 +108,16 @@ async function flushPendingReplies(queryClient: ReturnType<typeof useQueryClient
 
 export default function PostDetailPage() {
   const params = useParams();
+  const pathname = usePathname() ?? "";
   const queryClient = useQueryClient();
   const postId = params.id as string;
+  const communityHomePath = pathname.startsWith("/student/")
+    ? "/student/community"
+    : pathname.startsWith("/tutor/")
+      ? "/tutor/community"
+      : pathname.startsWith("/headmaster/")
+        ? "/headmaster/community"
+        : "/dashboard/community";
   const { data: post, isLoading: postLoading, isError: postError } = usePost(postId);
   const { data: comments } = useComments(postId);
   const authorIds = [
@@ -168,7 +176,7 @@ export default function PostDetailPage() {
     return (
       <div>
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/dashboard/community">← Community</Link>
+          <Link href={communityHomePath}>← Community</Link>
         </Button>
         <p className="mt-4 text-muted-foreground">{postLoading ? "Loading…" : "Post not found."}</p>
       </div>
@@ -178,7 +186,7 @@ export default function PostDetailPage() {
     return (
       <div>
         <Button variant="ghost" size="sm" asChild>
-          <Link href="/dashboard/community">← Community</Link>
+          <Link href={communityHomePath}>← Community</Link>
         </Button>
         <p className="mt-4 text-destructive">Failed to load post.</p>
       </div>
@@ -187,9 +195,11 @@ export default function PostDetailPage() {
 
   return (
     <div className="px-2 sm:px-4 pb-6">
-      <Button variant="ghost" size="sm" className="min-h-10 touch-manipulation" asChild>
-        <Link href="/dashboard/community">← Community</Link>
-      </Button>
+      <div className="sticky top-0 z-10 -mx-2 sm:-mx-4 mb-2 border-b border-border bg-background/95 px-2 py-2 backdrop-blur sm:px-4">
+        <Button variant="outline" size="sm" className="min-h-10 touch-manipulation" asChild>
+          <Link href={communityHomePath}>← Back to community</Link>
+        </Button>
+      </div>
 
       <Card className="mt-4">
         <CardHeader className="px-4 sm:px-6">

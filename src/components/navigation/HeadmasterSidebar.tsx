@@ -10,6 +10,7 @@ const items = [
   { href: "/headmaster", label: "Overview" },
   { href: "/headmaster/staff", label: "Staff" },
   { href: "/headmaster/cohorts", label: "Cohorts" },
+  { href: "/headmaster/timetable", label: "Timetable" },
   { href: "/headmaster/payments", label: "Payments" },
   { href: "/headmaster/pricing", label: "Pricing Guide" },
   { href: "/headmaster/results", label: "Results" },
@@ -31,7 +32,7 @@ export default function HeadmasterSidebar({ institutionName }: HeadmasterSidebar
       ) : null}
       <nav className="p-2 space-y-1 flex-1">
         {items.map((i) => {
-          const active = pathname === i.href;
+          const active = i.href === "/headmaster" ? pathname === i.href : pathname.startsWith(`${i.href}/`) || pathname === i.href;
           return (
             <Link
               key={i.href}
