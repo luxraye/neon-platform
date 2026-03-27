@@ -131,6 +131,9 @@ create table if not exists public.quizzes (
   title text not null,
   questions jsonb not null default '[]'::jsonb,
   time_limit_minutes integer not null default 30 check (time_limit_minutes > 0),
+  access_password_hash text not null default '',
+  security_mode text not null default 'medium' check (security_mode in ('light', 'medium', 'strict')),
+  max_focus_violations integer not null default 2 check (max_focus_violations between 1 and 10),
   created_at timestamptz not null default now()
 );
 
@@ -138,10 +141,71 @@ create table if not exists public.quiz_attempts (
   id uuid primary key default gen_random_uuid(),
   quiz_id uuid not null references public.quizzes(id) on delete cascade,
   student_id uuid not null references public.profiles(id) on delete cascade,
-  answers jsonb not null default '{}'::jsonb,
+  answers jsonb not null default '[]'::jsonb,
+  question_snapshot jsonb not null default '[]'::jsonb,
   score numeric(5,2),
+  started_at timestamptz not null default now(),
+  ended_at timestamptz,
+  status text not null default 'in_progress' check (status in ('in_progress', 'submitted', 'auto_submitted', 'invalidated')),
+  submitted_reason text not null default 'manual' check (submitted_reason in ('manual', 'timer_expired', 'security_violation')),
+  focus_violations integer not null default 0 check (focus_violations >= 0),
+  time_spent_seconds integer not null default 0 check (time_spent_seconds >= 0),
   submitted_at timestamptz not null default now()
 );
+
+alter table if exists public.quizzes
+  add column if not exists access_password_hash text not null default '';
+alter table if exists public.quizzes
+  add column if not exists security_mode text not null default 'medium';
+alter table if exists public.quizzes
+  add column if not exists max_focus_violations integer not null default 2;
+alter table if exists public.quizzes
+  drop constraint if exists quizzes_security_mode_check;
+alter table if exists public.quizzes
+  add constraint quizzes_security_mode_check
+  check (security_mode in ('light', 'medium', 'strict'));
+alter table if exists public.quizzes
+  drop constraint if exists quizzes_max_focus_violations_check;
+alter table if exists public.quizzes
+  add constraint quizzes_max_focus_violations_check
+  check (max_focus_violations between 1 and 10);
+
+alter table if exists public.quiz_attempts
+  alter column answers set default '[]'::jsonb;
+alter table if exists public.quiz_attempts
+  add column if not exists question_snapshot jsonb not null default '[]'::jsonb;
+alter table if exists public.quiz_attempts
+  add column if not exists started_at timestamptz not null default now();
+alter table if exists public.quiz_attempts
+  add column if not exists ended_at timestamptz;
+alter table if exists public.quiz_attempts
+  add column if not exists status text not null default 'in_progress';
+alter table if exists public.quiz_attempts
+  add column if not exists submitted_reason text not null default 'manual';
+alter table if exists public.quiz_attempts
+  add column if not exists focus_violations integer not null default 0;
+alter table if exists public.quiz_attempts
+  add column if not exists time_spent_seconds integer not null default 0;
+alter table if exists public.quiz_attempts
+  drop constraint if exists quiz_attempts_status_check;
+alter table if exists public.quiz_attempts
+  add constraint quiz_attempts_status_check
+  check (status in ('in_progress', 'submitted', 'auto_submitted', 'invalidated'));
+alter table if exists public.quiz_attempts
+  drop constraint if exists quiz_attempts_submitted_reason_check;
+alter table if exists public.quiz_attempts
+  add constraint quiz_attempts_submitted_reason_check
+  check (submitted_reason in ('manual', 'timer_expired', 'security_violation'));
+alter table if exists public.quiz_attempts
+  drop constraint if exists quiz_attempts_focus_violations_check;
+alter table if exists public.quiz_attempts
+  add constraint quiz_attempts_focus_violations_check
+  check (focus_violations >= 0);
+alter table if exists public.quiz_attempts
+  drop constraint if exists quiz_attempts_time_spent_seconds_check;
+alter table if exists public.quiz_attempts
+  add constraint quiz_attempts_time_spent_seconds_check
+  check (time_spent_seconds >= 0);
 
 create table if not exists public.forum_posts (
   id uuid primary key default gen_random_uuid(),
@@ -289,6 +353,8 @@ create index if not exists idx_cohorts_institution on public.cohorts(institution
 create index if not exists idx_materials_institution_subject on public.materials(institution_id, subject);
 create index if not exists idx_quizzes_institution on public.quizzes(institution_id);
 create index if not exists idx_quiz_attempts_student on public.quiz_attempts(student_id, submitted_at desc);
+create index if not exists idx_quiz_attempts_quiz_submitted on public.quiz_attempts(quiz_id, submitted_at desc);
+create index if not exists idx_quiz_attempts_quiz_status on public.quiz_attempts(quiz_id, status);
 create index if not exists idx_forum_posts_institution_created on public.forum_posts(institution_id, created_at desc);
 create index if not exists idx_forum_comments_post on public.forum_comments(post_id);
 create index if not exists idx_timetables_institution_cohort on public.timetables(institution_id, cohort_id, day_of_week, start_time);
@@ -374,6 +440,7 @@ drop policy if exists "quizzes_select_institution" on public.quizzes;
 drop policy if exists "quizzes_manage_staff" on public.quizzes;
 drop policy if exists "quiz_attempts_select_own_or_staff" on public.quiz_attempts;
 drop policy if exists "quiz_attempts_insert_student" on public.quiz_attempts;
+drop policy if exists "quiz_attempts_update_own_open" on public.quiz_attempts;
 drop policy if exists "forum_posts_select_institution" on public.forum_posts;
 drop policy if exists "forum_posts_insert_own" on public.forum_posts;
 drop policy if exists "forum_comments_select_institution" on public.forum_comments;
@@ -480,6 +547,15 @@ for insert with check (
     where q.id = quiz_attempts.quiz_id
       and q.institution_id = public.get_auth_institution_id()
   )
+);
+
+create policy "quiz_attempts_update_own_open" on public.quiz_attempts
+for update using (
+  student_id = auth.uid()
+  and status = 'in_progress'
+)
+with check (
+  student_id = auth.uid()
 );
 
 create policy "forum_posts_select_institution" on public.forum_posts
@@ -661,6 +737,7 @@ grant select, insert, update, delete on public.cohorts to authenticated;
 grant select, insert, update, delete on public.materials to authenticated;
 grant select, insert, update, delete on public.quizzes to authenticated;
 grant select, insert on public.quiz_attempts to authenticated;
+grant update on public.quiz_attempts to authenticated;
 grant select, insert on public.forum_posts to authenticated;
 grant select, insert on public.forum_comments to authenticated;
 grant select, insert, update, delete on public.timetables to authenticated;

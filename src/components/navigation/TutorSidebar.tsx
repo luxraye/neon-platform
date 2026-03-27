@@ -11,6 +11,7 @@ const items = [
   { href: "/tutor/cohorts", label: "Cohorts" },
   { href: "/tutor/subjects", label: "Subjects" },
   { href: "/tutor/quizzes", label: "Quizzes" },
+  { href: "/tutor/results", label: "Results" },
   { href: "/tutor/attendance", label: "Attendance" },
   { href: "/tutor/community", label: "Community" },
   { href: "/tutor/settings", label: "Settings" },
@@ -54,4 +55,5 @@ export default function TutorSidebar({ institutionName }: TutorSidebarProps) {
     </div>
   );
 }
+
 

@@ -1,5 +1,6 @@
 "use server";
 
+import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { createServiceRoleClient } from "@/utils/supabase/admin";
 import { getUserIdentity } from "@/utils/supabase/get-user-identity";
 
@@ -14,11 +15,30 @@ export type CreateQuizResult =
   | { success: true }
   | { success: false; error: string };
 
+function hashQuizPassword(password: string): string {
+  const salt = randomBytes(16).toString("hex");
+  const digest = scryptSync(password, salt, 64).toString("hex");
+  return `${salt}:${digest}`;
+}
+
+function verifyQuizPassword(password: string, storedHash: string): boolean {
+  const [salt, storedDigest] = storedHash.split(":");
+  if (!salt || !storedDigest) return false;
+  const derived = scryptSync(password, salt, 64).toString("hex");
+  const derivedBuffer = Buffer.from(derived, "hex");
+  const storedBuffer = Buffer.from(storedDigest, "hex");
+  if (derivedBuffer.length !== storedBuffer.length) return false;
+  return timingSafeEqual(derivedBuffer, storedBuffer);
+}
+
 export async function createQuiz(formData: {
   title: string;
   questions: QuizQuestion[];
   time_limit_minutes?: number;
   cohort_id?: string;
+  access_password?: string;
+  security_mode?: "light" | "medium" | "strict";
+  max_focus_violations?: number;
 }): Promise<CreateQuizResult> {
   const identity = await getUserIdentity();
   if (!identity?.user) {
@@ -36,6 +56,10 @@ export async function createQuiz(formData: {
 
   if (!Array.isArray(formData.questions) || formData.questions.length === 0) {
     return { success: false, error: "At least one question is required." };
+  }
+  const accessPassword = (formData.access_password ?? "").trim();
+  if (accessPassword.length < 6) {
+    return { success: false, error: "Quiz password must be at least 6 characters." };
   }
 
   for (const q of formData.questions) {
@@ -67,12 +91,17 @@ export async function createQuiz(formData: {
   }
 
   const admin = createServiceRoleClient();
+  const securityMode = formData.security_mode ?? "medium";
+  const maxFocusViolations = Math.min(10, Math.max(1, formData.max_focus_violations ?? 2));
   const { error } = await admin.from("quizzes").insert({
     institution_id: identity.institution_id,
     cohort_id: formData.cohort_id?.trim() || null,
     title,
     questions: normalizedQuestions as unknown,
     time_limit_minutes: formData.time_limit_minutes ?? 30,
+    access_password_hash: hashQuizPassword(accessPassword),
+    security_mode: securityMode,
+    max_focus_violations: maxFocusViolations,
   });
 
   if (error) {

@@ -10,6 +10,7 @@ const items = [
   { href: "/student", label: "My Learning" },
   { href: "/student/timetable", label: "Timetable" },
   { href: "/student/community", label: "Community" },
+  { href: "/student/results", label: "Results" },
   { href: "/student/mobile-setup", label: "Mobile Setup" },
   { href: "/student/settings", label: "Settings" },
 ];
@@ -52,4 +53,5 @@ export default function StudentSidebar({ institutionName }: StudentSidebarProps)
     </div>
   );
 }
+
 

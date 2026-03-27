@@ -12,6 +12,7 @@ const items = [
   { href: "/headmaster/cohorts", label: "Cohorts" },
   { href: "/headmaster/payments", label: "Payments" },
   { href: "/headmaster/pricing", label: "Pricing Guide" },
+  { href: "/headmaster/results", label: "Results" },
   { href: "/headmaster/settings", label: "Settings" },
 ];
 
@@ -53,4 +54,5 @@ export default function HeadmasterSidebar({ institutionName }: HeadmasterSidebar
     </div>
   );
 }
+
 

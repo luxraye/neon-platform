@@ -40,6 +40,8 @@ export default function NewQuizPage() {
   const [title, setTitle] = useState("");
   const [cohortId, setCohortId] = useState("");
   const [timeLimit, setTimeLimit] = useState(30);
+  const [accessPassword, setAccessPassword] = useState("");
+  const [maxFocusViolations, setMaxFocusViolations] = useState(2);
   const [questions, setQuestions] = useState<McQuestion[]>([
     { question: "", options: ["", "", ""], correctIndex: 0 },
   ]);
@@ -105,6 +107,9 @@ export default function NewQuizPage() {
       title,
       cohort_id: cohortId || undefined,
       time_limit_minutes: timeLimit,
+      access_password: accessPassword,
+      security_mode: "medium",
+      max_focus_violations: maxFocusViolations,
       questions: normalizedQuestions,
     });
     setSubmitting(false);
@@ -163,6 +168,32 @@ export default function NewQuizPage() {
             min={1}
             value={timeLimit}
             onChange={(e) => setTimeLimit(Number(e.target.value) || 30)}
+          />
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="quiz-password">Quiz password</Label>
+          <Input
+            id="quiz-password"
+            type="password"
+            value={accessPassword}
+            onChange={(e) => setAccessPassword(e.target.value)}
+            placeholder="Required to start quiz"
+            minLength={6}
+            required
+          />
+          <p className="text-xs text-muted-foreground">
+            Share this password with students only when invigilated.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="focus-violations">Auto-submit after focus violations</Label>
+          <Input
+            id="focus-violations"
+            type="number"
+            min={1}
+            max={10}
+            value={maxFocusViolations}
+            onChange={(e) => setMaxFocusViolations(Math.min(10, Math.max(1, Number(e.target.value) || 2)))}
           />
         </div>
 

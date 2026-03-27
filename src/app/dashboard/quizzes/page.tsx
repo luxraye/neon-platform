@@ -22,6 +22,7 @@ type Quiz = {
   title: string;
   cohort_id: string | null;
   time_limit_minutes: number;
+  max_focus_violations: number;
   created_at: string;
 };
 
@@ -33,7 +34,7 @@ function useQuizzes(institutionId: string | null) {
       if (!institutionId) return [];
       const { data, error } = await supabase
         .from("quizzes")
-        .select("id, title, cohort_id, time_limit_minutes, created_at")
+        .select("id, title, cohort_id, time_limit_minutes, max_focus_violations, created_at")
         .eq("institution_id", institutionId)
         .order("created_at", { ascending: false });
       if (error) throw error;
@@ -68,11 +69,16 @@ export default function QuizzesPage() {
             Multiple choice only. Each quiz uses a countdown timer (set the limit when you create it).
           </p>
         </div>
-        {canManage && (
-          <Button asChild>
-            <Link href={newQuizHref}>Create quiz</Link>
+        <div className="flex items-center gap-2">
+          <Button asChild variant="outline">
+            <Link href="/dashboard/results">Results</Link>
           </Button>
-        )}
+          {canManage && (
+            <Button asChild>
+              <Link href={newQuizHref}>Create quiz</Link>
+            </Button>
+          )}
+        </div>
       </div>
 
       {isLoading && <p className="text-muted-foreground">Loading quizzes…</p>}
@@ -87,12 +93,13 @@ export default function QuizzesPage() {
                 <TableHead>Title</TableHead>
                 <TableHead>Cohort</TableHead>
                 <TableHead>Time limit</TableHead>
+                <TableHead>Security</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {!quizzes?.length ? (
                 <TableRow>
-                  <TableCell colSpan={3} className="text-center text-muted-foreground py-8">
+                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
                     {canManage ? (
                       <>
                         No quizzes yet.{" "}
@@ -115,6 +122,9 @@ export default function QuizzesPage() {
                     </TableCell>
                     <TableCell className="text-muted-foreground">
                       {q.time_limit_minutes} min
+                    </TableCell>
+                    <TableCell className="text-muted-foreground">
+                      Medium ({q.max_focus_violations} violations)
                     </TableCell>
                   </TableRow>
                 ))

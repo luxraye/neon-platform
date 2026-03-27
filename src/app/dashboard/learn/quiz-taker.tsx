@@ -2,19 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
 import { Button } from "@/components/ui/button";
-import { Input } from "@/components/ui/input";
-import { Label } from "@/components/ui/label";
 import {
   Card,
   CardContent,
-  CardDescription,
   CardHeader,
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
-import { createQuizResultNotification } from "./actions";
+import { createQuizResultNotification, submitQuizAttempt } from "./actions";
 
 type MultipleChoiceQuestion = {
   type?: "multiple_choice";
@@ -23,13 +19,7 @@ type MultipleChoiceQuestion = {
   correctIndex: number;
 };
 
-type ShortTextQuestion = {
-  type: "short_text";
-  question: string;
-  answer: string;
-};
-
-type QuizQuestion = MultipleChoiceQuestion | ShortTextQuestion;
+type QuizQuestion = MultipleChoiceQuestion;
 
 type Quiz = {
   id: string;
@@ -40,19 +30,25 @@ type Quiz = {
 
 export function QuizTaker({
   quiz,
+  attemptId,
+  maxFocusViolations,
   onClose,
 }: {
   quiz: Quiz;
+  attemptId: string;
+  maxFocusViolations: number;
   onClose: () => void;
 }) {
   const router = useRouter();
   const questions = (Array.isArray(quiz.questions) ? quiz.questions : []) as unknown as QuizQuestion[];
   const [currentIndex, setCurrentIndex] = useState(0);
-  const [answers, setAnswers] = useState<Record<number, number | string>>({});
+  const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
   const [submitting, setSubmitting] = useState(false);
   const [secondsLeft, setSecondsLeft] = useState(quiz.time_limit_minutes * 60);
   const [timeUp, setTimeUp] = useState(false);
+  const [focusViolations, setFocusViolations] = useState(0);
+  const [warned, setWarned] = useState(false);
 
   useEffect(() => {
     if (submitted) return;
@@ -69,73 +65,98 @@ export function QuizTaker({
     return () => clearInterval(t);
   }, [submitted]);
 
-  const handleSubmit = async () => {
+  useEffect(() => {
+    if (submitted) return;
+    const preventDefault = (event: Event) => event.preventDefault();
+    const blockKeys = (event: KeyboardEvent) => {
+      if ((event.ctrlKey || event.metaKey) && ["c", "v", "x", "a"].includes(event.key.toLowerCase())) {
+        event.preventDefault();
+      }
+    };
+    document.addEventListener("copy", preventDefault);
+    document.addEventListener("paste", preventDefault);
+    document.addEventListener("cut", preventDefault);
+    document.addEventListener("contextmenu", preventDefault);
+    document.addEventListener("selectstart", preventDefault);
+    document.addEventListener("keydown", blockKeys);
+
+    return () => {
+      document.removeEventListener("copy", preventDefault);
+      document.removeEventListener("paste", preventDefault);
+      document.removeEventListener("cut", preventDefault);
+      document.removeEventListener("contextmenu", preventDefault);
+      document.removeEventListener("selectstart", preventDefault);
+      document.removeEventListener("keydown", blockKeys);
+    };
+  }, [submitted]);
+
+  useEffect(() => {
+    if (submitted) return;
+    const registerViolation = () => {
+      setFocusViolations((prev) => prev + 1);
+    };
+    const onVisibility = () => {
+      if (document.hidden) registerViolation();
+    };
+    const onBlur = () => registerViolation();
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("blur", onBlur);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("blur", onBlur);
+    };
+  }, [submitted]);
+
+  useEffect(() => {
+    if (submitted) return;
+    if (focusViolations <= 0) return;
+    if (focusViolations >= maxFocusViolations) {
+      toast.error("Security threshold reached. Quiz will now submit.");
+      void handleSubmit("security_violation");
+      return;
+    }
+    if (!warned) {
+      setWarned(true);
+      toast.warning(`Security warning: do not switch tabs/windows. Violations: ${focusViolations}/${maxFocusViolations}`);
+    } else {
+      toast.warning(`Focus violations: ${focusViolations}/${maxFocusViolations}`);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [focusViolations, maxFocusViolations, submitted]);
+
+  const handleSubmit = async (reason: "manual" | "timer_expired" | "security_violation" = "manual") => {
     if (submitted) return;
     setSubmitted(true);
     setTimeUp(false);
     setSubmitting(true);
 
-    const supabase = createBrowserSupabaseClient();
-    const { data: { user } } = await supabase.auth.getUser();
-    if (!user) {
-      toast.error("Not signed in.");
-      setSubmitting(false);
-      return;
-    }
-
-    const answerArray = questions.map((q, i) => {
-      if (q && "type" in q && q.type === "short_text") {
-        return typeof answers[i] === "string" ? answers[i] : "";
-      }
-      return typeof answers[i] === "number" ? answers[i] : -1;
-    });
-
-    const normalize = (s: string) =>
-      s
-        .trim()
-        .toLowerCase()
-        .replace(/\s+/g, " ");
-
-    let correct = 0;
-    questions.forEach((q, i) => {
-      if (q && "type" in q && q.type === "short_text") {
-        const expected = normalize((q as ShortTextQuestion).answer ?? "");
-        const given = normalize(String(answerArray[i] ?? ""));
-        if (expected && given && expected === given) correct++;
-        return;
-      }
-
-      const mc = q as MultipleChoiceQuestion;
-      if (answerArray[i] === mc.correctIndex) correct++;
-    });
-    const score = questions.length ? (correct / questions.length) * 100 : 0;
-
-    const { error } = await supabase.from("quiz_attempts").insert({
-      quiz_id: quiz.id,
-      student_id: user.id,
+    const answerArray = questions.map((_, i) => (typeof answers[i] === "number" ? answers[i] : -1));
+    const result = await submitQuizAttempt({
+      attemptId,
       answers: answerArray,
-      score,
+      focusViolations,
+      submittedReason: reason,
     });
 
     setSubmitting(false);
-    if (error) {
-      toast.error(error.message);
+    if (!result.success) {
+      toast.error(result.error);
       return;
     }
     // Create an in-app notification (service role on the server).
     try {
-      await createQuizResultNotification({ quizTitle: quiz.title, score });
+      await createQuizResultNotification({ quizTitle: quiz.title, score: result.score });
     } catch {
       // ignore notification failures; quiz attempt is the source of truth
     }
-    toast.success(`Submitted. Score: ${score.toFixed(0)}%`);
+    toast.success(`Submitted. Score: ${result.score.toFixed(0)}%`);
     onClose();
     router.refresh();
   };
 
   useEffect(() => {
     if (timeUp && !submitted) {
-      handleSubmit();
+      void handleSubmit("timer_expired");
     }
   // eslint-disable-next-line react-hooks/exhaustive-deps -- only run when timeUp, handleSubmit is stable enough
   }, [timeUp]);
@@ -171,39 +192,26 @@ export function QuizTaker({
           <CardTitle className="text-base">{q.question}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {"type" in q && q.type === "short_text" ? (
-            <div className="space-y-2">
-              <Label htmlFor={`answer-${currentIndex}`}>Your answer</Label>
-              <Input
-                id={`answer-${currentIndex}`}
-                value={typeof answers[currentIndex] === "string" ? (answers[currentIndex] as string) : ""}
-                onChange={(e) => setAnswers((a) => ({ ...a, [currentIndex]: e.target.value }))}
+          {(q as MultipleChoiceQuestion).options.map((opt, oIndex) => (
+            <label
+              key={oIndex}
+              className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${
+                answers[currentIndex] === oIndex
+                  ? "border-primary bg-primary/10"
+                  : "border-border hover:bg-muted/50"
+              }`}
+            >
+              <input
+                type="radio"
+                name="option"
+                checked={answers[currentIndex] === oIndex}
+                onChange={() => setAnswers((a) => ({ ...a, [currentIndex]: oIndex }))}
                 disabled={submitted}
-                placeholder="Type your answer"
+                className="sr-only"
               />
-            </div>
-          ) : (
-            (q as MultipleChoiceQuestion).options.map((opt, oIndex) => (
-              <label
-                key={oIndex}
-                className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${
-                  answers[currentIndex] === oIndex
-                    ? "border-primary bg-primary/10"
-                    : "border-border hover:bg-muted/50"
-                }`}
-              >
-                <input
-                  type="radio"
-                  name="option"
-                  checked={answers[currentIndex] === oIndex}
-                  onChange={() => setAnswers((a) => ({ ...a, [currentIndex]: oIndex }))}
-                  disabled={submitted}
-                  className="sr-only"
-                />
-                <span>{opt || "(empty option)"}</span>
-              </label>
-            ))
-          )}
+              <span>{opt || "(empty option)"}</span>
+            </label>
+          ))}
         </CardContent>
       </Card>
 
@@ -220,7 +228,7 @@ export function QuizTaker({
             Next
           </Button>
         ) : (
-          <Button onClick={handleSubmit} disabled={submitting}>
+          <Button onClick={() => void handleSubmit("manual")} disabled={submitting}>
             {submitting ? "Submitting…" : "Submit"}
           </Button>
         )}

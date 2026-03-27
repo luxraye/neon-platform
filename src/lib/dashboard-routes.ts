@@ -9,6 +9,7 @@ export const DASHBOARD_ROUTE_ROLES: { path: string; roles: DashboardRole[] }[] =
   { path: "/dashboard/staff", roles: ["headmaster"] },
   { path: "/dashboard/materials", roles: ["tutor", "headmaster"] },
   { path: "/dashboard/quizzes", roles: ["tutor", "headmaster"] },
+  { path: "/dashboard/results", roles: ["student", "tutor", "headmaster"] },
   { path: "/dashboard/learn/progress", roles: ["student"] },
   { path: "/dashboard/learn", roles: ["student"] },
   { path: "/dashboard/attendance", roles: ["tutor", "headmaster"] },
