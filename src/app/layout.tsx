@@ -20,9 +20,10 @@ export const metadata: Metadata = {
     "The most reliable student management and LMS for tuition centres in Botswana, featuring offline NLM sync.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://neon.example.com"),
   icons: {
-    icon: "/favicon.ico",
-    shortcut: "/favicon.ico",
+    icon: "/icon.svg",
+    shortcut: "/icon.svg",
   },
+  manifest: "/manifest.json",
   openGraph: {
     title: "Neon | Tuition Management Platform",
     description:
