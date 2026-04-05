@@ -42,6 +42,7 @@ export default function NewQuizPage() {
   const [timeLimit, setTimeLimit] = useState(30);
   const [accessPassword, setAccessPassword] = useState("");
   const [maxFocusViolations, setMaxFocusViolations] = useState(2);
+  const [dueAt, setDueAt] = useState("");
   const [questions, setQuestions] = useState<McQuestion[]>([
     { question: "", options: ["", "", ""], correctIndex: 0 },
   ]);
@@ -110,6 +111,7 @@ export default function NewQuizPage() {
       access_password: accessPassword,
       security_mode: "medium",
       max_focus_violations: maxFocusViolations,
+      due_at: dueAt.trim() || undefined,
       questions: normalizedQuestions,
     });
     setSubmitting(false);
@@ -183,6 +185,18 @@ export default function NewQuizPage() {
           />
           <p className="text-xs text-muted-foreground">
             Share this password with students only when invigilated.
+          </p>
+        </div>
+        <div className="space-y-2">
+          <Label htmlFor="quiz-due">Completion due date (optional)</Label>
+          <Input
+            id="quiz-due"
+            type="date"
+            value={dueAt}
+            onChange={(e) => setDueAt(e.target.value)}
+          />
+          <p className="text-xs text-muted-foreground">
+            Students get email reminders in the last few days before this date (requires scheduled cron).
           </p>
         </div>
         <div className="space-y-2">

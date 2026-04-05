@@ -134,6 +134,7 @@ create table if not exists public.quizzes (
   access_password_hash text not null default '',
   security_mode text not null default 'medium' check (security_mode in ('light', 'medium', 'strict')),
   max_focus_violations integer not null default 2 check (max_focus_violations between 1 and 10),
+  due_at date,
   created_at timestamptz not null default now()
 );
 
@@ -169,6 +170,8 @@ alter table if exists public.quizzes
 alter table if exists public.quizzes
   add constraint quizzes_max_focus_violations_check
   check (max_focus_violations between 1 and 10);
+alter table if exists public.quizzes
+  add column if not exists due_at date;
 
 alter table if exists public.quiz_attempts
   alter column answers set default '[]'::jsonb;
@@ -334,6 +337,16 @@ create table if not exists public.notifications (
   is_read boolean not null default false,
   created_at timestamptz not null default now()
 );
+
+-- Idempotent dedupe keys for scheduled email (cron); service role only.
+create table if not exists public.email_dispatch_log (
+  dedupe_key text primary key,
+  sent_at timestamptz not null default now()
+);
+
+create index if not exists idx_email_dispatch_log_sent on public.email_dispatch_log(sent_at desc);
+
+alter table public.email_dispatch_log enable row level security;
 
 create table if not exists public.leads (
   id uuid primary key default gen_random_uuid(),

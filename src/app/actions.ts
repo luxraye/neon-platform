@@ -1,6 +1,7 @@
 "use server";
 
 import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getAdminProfiles, notifyUsers } from "@/lib/notify-dispatch";
 
 export type SchoolMatch = { name: string; subdomain: string } | null;
 
@@ -33,22 +34,20 @@ export async function submitLead(input: {
   if (leadError) return { success: false, error: leadError.message };
   if (!lead) return { success: false, error: "Failed to save lead." };
 
-  const { data: adminProfile } = await admin
-    .from("profiles")
-    .select("id")
-    .eq("role", "admin")
-    .limit(1)
-    .maybeSingle();
-
-  if (adminProfile?.id) {
-    const institutionName = input.institution_name?.trim() || "Unknown";
-    await admin.from("notifications").insert({
-      user_id: adminProfile.id,
-      title: "New lead",
-      message: `New Lead: ${institutionName} has inquired!`,
-      type: "announcement",
-      is_read: false,
-    });
+  const institutionName = input.institution_name?.trim() || "Unknown";
+  const admins = await getAdminProfiles();
+  if (admins.length) {
+    const msg = `New lead from ${name} (${email}) — ${institutionName}.${input.message?.trim() ? ` Message: ${input.message.trim()}` : ""}`;
+    try {
+      await notifyUsers(
+        admins.map((a) => ({ userId: a.id, email: a.email ?? null })),
+        "New lead",
+        msg,
+        "announcement"
+      );
+    } catch (e) {
+      console.error("[submitLead] notify admins", e);
+    }
   }
 
   return { success: true };

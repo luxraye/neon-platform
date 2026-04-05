@@ -3,6 +3,7 @@
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { createServiceRoleClient } from "@/utils/supabase/admin";
 import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { broadcastNewQuizToStudents } from "@/lib/notify-dispatch";
 
 export type QuizQuestion = {
   type: "multiple_choice";
@@ -39,6 +40,8 @@ export async function createQuiz(formData: {
   access_password?: string;
   security_mode?: "light" | "medium" | "strict";
   max_focus_violations?: number;
+  /** Optional YYYY-MM-DD — reminders use cron + email. */
+  due_at?: string | null;
 }): Promise<CreateQuizResult> {
   const identity = await getUserIdentity();
   if (!identity?.user) {
@@ -93,19 +96,32 @@ export async function createQuiz(formData: {
   const admin = createServiceRoleClient();
   const securityMode = formData.security_mode ?? "medium";
   const maxFocusViolations = Math.min(10, Math.max(1, formData.max_focus_violations ?? 2));
+  const cohortId = formData.cohort_id?.trim() || null;
+  const dueRaw = formData.due_at?.trim();
+  const dueAt = dueRaw && /^\d{4}-\d{2}-\d{2}$/.test(dueRaw) ? dueRaw : null;
+
   const { error } = await admin.from("quizzes").insert({
     institution_id: identity.institution_id,
-    cohort_id: formData.cohort_id?.trim() || null,
+    cohort_id: cohortId,
     title,
     questions: normalizedQuestions as unknown,
     time_limit_minutes: formData.time_limit_minutes ?? 30,
     access_password_hash: hashQuizPassword(accessPassword),
     security_mode: securityMode,
     max_focus_violations: maxFocusViolations,
+    due_at: dueAt,
   });
 
   if (error) {
     return { success: false, error: error.message };
+  }
+
+  if (cohortId) {
+    try {
+      await broadcastNewQuizToStudents(identity.institution_id, cohortId, title, dueAt);
+    } catch (e) {
+      console.error("[createQuiz] notify students", e);
+    }
   }
 
   return { success: true };

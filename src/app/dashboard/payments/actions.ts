@@ -2,6 +2,7 @@
 
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { notifyUsers } from "@/lib/notify-dispatch";
 import type { PlatformInvoice, PlatformPaymentTransaction } from "@/lib/platform-payments";
 
 export type RecordPaymentResult =
@@ -84,7 +85,7 @@ export async function sendFeeReminders(): Promise<SendFeeRemindersResult> {
 
   const { data: students, error: studentsError } = await admin
     .from("profiles")
-    .select("id")
+    .select("id, email")
     .eq("institution_id", instId)
     .eq("role", "student");
   if (studentsError) return { success: false, error: studentsError.message };
@@ -106,16 +107,23 @@ export async function sendFeeReminders(): Promise<SendFeeRemindersResult> {
 
   const now = new Date();
   const monthName = now.toLocaleString(undefined, { month: "long" });
-  const rows = pending.map((id) => ({
-    user_id: id,
-    title: "Fee reminder",
-    message: `Your fees for ${monthName} are pending. Please contact your center if you've already paid.`,
-    type: "fee_reminder" as const,
-    is_read: false,
-  }));
+  const message = `Your fees for ${monthName} are pending. Please contact your center if you've already paid.`;
+  const pendingProfiles = (students ?? []).filter((s: { id: string }) => pending.includes(s.id)) as {
+    id: string;
+    email: string | null;
+  }[];
 
-  const { error: notifError } = await admin.from("notifications").insert(rows);
-  if (notifError) return { success: false, error: notifError.message };
+  try {
+    await notifyUsers(
+      pendingProfiles.map((p) => ({ userId: p.id, email: p.email })),
+      "Fee reminder",
+      message,
+      "fee_reminder"
+    );
+  } catch (e) {
+    console.error("[sendFeeReminders]", e);
+    return { success: false, error: e instanceof Error ? e.message : "Failed to notify." };
+  }
   return { success: true, notified: pending.length };
 }
 

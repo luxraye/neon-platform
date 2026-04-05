@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { createServiceRoleClient } from "@/utils/supabase/admin";
 import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { broadcastNewMaterialToStudents } from "@/lib/notify-dispatch";
 
 const MATERIALS_BUCKET = "material-documents";
 
@@ -52,9 +53,10 @@ export async function createMaterial(formData: {
   }
 
   const admin = createServiceRoleClient();
+  const cohortId = formData.cohort_id?.trim() || null;
   const { error } = await admin.from("materials").insert({
     institution_id: identity.institution_id,
-    cohort_id: formData.cohort_id?.trim() || null,
+    cohort_id: cohortId,
     title,
     content_url: formData.content_url?.trim() || null,
     description: formData.description?.trim() || null,
@@ -63,6 +65,12 @@ export async function createMaterial(formData: {
 
   if (error) {
     return { success: false, error: error.message };
+  }
+
+  try {
+    await broadcastNewMaterialToStudents(identity.institution_id, cohortId, title);
+  } catch (e) {
+    console.error("[createMaterial] notify students", e);
   }
 
   return { success: true };
@@ -136,6 +144,12 @@ export async function uploadMaterialDocument(formData: FormData): Promise<Create
 
   if (error) {
     return { success: false, error: error.message };
+  }
+
+  try {
+    await broadcastNewMaterialToStudents(identity.institution_id, cohort_id, title);
+  } catch (e) {
+    console.error("[uploadMaterialDocument] notify students", e);
   }
 
   return { success: true };

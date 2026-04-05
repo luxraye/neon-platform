@@ -6,6 +6,7 @@
  */
 import { createServiceRoleClient } from "@/utils/supabase/admin";
 import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { notifyStaffUnassignedStudent } from "@/lib/notify-dispatch";
 
 export type HireTutorResult =
   | { success: true; provisionedEmail: string }
@@ -172,6 +173,14 @@ export async function provisionStudent(formData: {
       success: false,
       error: verifyErr?.message ?? "Profile row missing or inconsistent after upsert.",
     };
+  }
+
+  if (!cohortId) {
+    try {
+      await notifyStaffUnassignedStudent(instId, fullName, email);
+    } catch (e) {
+      console.error("[provisionStudent] notify staff", e);
+    }
   }
 
   return { success: true, provisionedEmail: email };

@@ -3,6 +3,7 @@
 import { randomUUID } from "crypto";
 import { createClient } from "@/utils/supabase/server";
 import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getAdminProfiles, notifyUsers } from "@/lib/notify-dispatch";
 import {
   FEEDBACK_SCREENSHOT_BUCKET,
   isAllowedFeedbackArea,
@@ -99,6 +100,21 @@ export async function submitUserFeedback(formData: FormData): Promise<SubmitFeed
     status: "new",
   });
   if (insertError) return { success: false, error: insertError.message };
+
+  try {
+    const admins = await getAdminProfiles();
+    if (admins.length) {
+      const msg = `[${severity}] ${area}: ${summary}${details ? `\n\n${details}` : ""}`;
+      await notifyUsers(
+        admins.map((a) => ({ userId: a.id, email: a.email })),
+        `Feedback: ${summary.slice(0, 72)}${summary.length > 72 ? "…" : ""}`,
+        msg,
+        "announcement"
+      );
+    }
+  } catch (e) {
+    console.error("[submitUserFeedback] notify admins", e);
+  }
 
   return { success: true };
 }
