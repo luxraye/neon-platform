@@ -18,7 +18,11 @@ function authorize(request: Request): boolean {
   return bearer === secret || header === secret;
 }
 
-/** Scheduled reminders: platform invoice due dates + quiz due dates. Call every 5–15 minutes from Vercel Cron or any scheduler. */
+/**
+ * Scheduled reminders: platform invoice due dates + quiz due dates.
+ * Vercel Hobby: crons may run at most once per day — see vercel.json schedule.
+ * On Pro you can use a tighter schedule (e.g. every 15m). External ping with CRON_SECRET also works.
+ */
 export async function GET(request: Request) {
   if (!authorize(request)) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
