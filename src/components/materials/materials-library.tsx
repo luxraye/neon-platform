@@ -31,7 +31,7 @@ import {
 } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Badge, EmptyState, PageHeader } from "@/components/ui/page";
-import { createMaterial, deleteMaterial, uploadMaterialDocument } from "@/app/dashboard/materials/actions";
+import { createMaterial, deleteMaterial, uploadMaterialDocument } from "@/app/_screens/materials/actions";
 
 const MAX_MB = 25;
 const OTHER = "Other";

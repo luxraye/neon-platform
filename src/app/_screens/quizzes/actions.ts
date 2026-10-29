@@ -102,7 +102,9 @@ export async function createQuiz(formData: {
   }
   const timeLimit = Math.min(300, Math.max(1, Math.floor(formData.time_limit_minutes ?? 30)));
   const dueRaw = formData.due_at?.trim();
-  const dueAt = dueRaw && /^\d{4}-\d{2}-\d{2}$/.test(dueRaw) ? dueRaw : null;
+  // Accepts a full ISO timestamp (end of the chosen day, from the browser) or a bare date.
+  const dueParsed = dueRaw ? new Date(/^\d{4}-\d{2}-\d{2}$/.test(dueRaw) ? `${dueRaw}T23:59:59Z` : dueRaw) : null;
+  const dueAt = dueParsed && !Number.isNaN(dueParsed.getTime()) ? dueParsed.toISOString() : null;
 
   const { error } = await admin.from("quizzes").insert({
     institution_id: identity.institution_id,

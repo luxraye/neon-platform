@@ -87,7 +87,12 @@ export async function GET(request: Request) {
       const instId = q.institution_id as string;
       const students = await getStudentsForMaterialAudience(instId, cohortId);
       const title = q.title as string;
-      const dueAt = q.due_at as string;
+      const dueAt = new Date(q.due_at as string).toLocaleDateString("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        timeZone: process.env.APP_TIMEZONE || "Africa/Gaborone",
+      });
       for (const s of students) {
         const dedupe = `quiz-due:${q.id}:${s.id}:${dateKey}`;
         const claimed = await tryClaimEmailDedupe(dedupe);

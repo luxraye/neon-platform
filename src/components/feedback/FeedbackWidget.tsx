@@ -46,7 +46,7 @@ export function FeedbackWidget() {
     data.set("summary", summary);
     data.set("details", details);
     if (screenshot) data.set("screenshot", screenshot);
-    const { submitUserFeedback } = await import("@/app/dashboard/feedback/actions");
+    const { submitUserFeedback } = await import("@/app/_screens/feedback/actions");
     const result = await submitUserFeedback(data);
     setSubmitting(false);
     if (!result.success) {
