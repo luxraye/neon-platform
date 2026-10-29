@@ -1,19 +1,7 @@
-import { redirect } from "next/navigation";
-import { RoleShell } from "@/components/navigation/RoleShell";
-import AdminSidebar from "@/components/navigation/AdminSidebar";
-import { getUserIdentity } from "@/lib/auth/identity";
+import { RoleLayout } from "@/components/shell/role-layout";
 
 export const dynamic = "force-dynamic";
 
-export default async function AdminLayout({ children }: { children: React.ReactNode }) {
-  const identity = await getUserIdentity();
-  if (!identity) redirect("/login");
-  if (identity.deleted_at) redirect("/deactivated");
-  if (identity.role !== "admin") redirect("/unauthorized");
-
-  return (
-    <RoleShell Sidebar={AdminSidebar} title="Platform Admin">
-      {children}
-    </RoleShell>
-  );
+export default function Layout({ children }: { children: React.ReactNode }) {
+  return <RoleLayout role="admin">{children}</RoleLayout>;
 }

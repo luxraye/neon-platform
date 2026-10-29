@@ -64,7 +64,7 @@ export function FeedbackWidget() {
         <Button
           type="button"
           size="icon"
-          className="fixed bottom-5 right-5 z-40 h-11 w-11 rounded-full shadow-lg"
+          className="fixed bottom-24 right-4 z-30 size-11 rounded-full shadow-lg lg:bottom-6 lg:right-6"
           aria-label="Open feedback form"
         >
           <CircleHelp className="h-5 w-5" />
