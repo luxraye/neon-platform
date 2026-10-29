@@ -44,9 +44,12 @@ export function AppShell({ role, user, centre, hasCohort = true, children }: She
   const mobileItems = items.filter((i) => i.mobile).slice(0, 4);
   const current = items.find((i) => isActive(pathname, i.href, root));
 
-  useEffect(() => {
+  // Close the phone drawer after navigating.
+  const [drawerPath, setDrawerPath] = useState(pathname);
+  if (drawerPath !== pathname) {
+    setDrawerPath(pathname);
     setDrawerOpen(false);
-  }, [pathname]);
+  }
 
   useEffect(() => {
     document.body.style.overflow = drawerOpen ? "hidden" : "";

@@ -14,3 +14,20 @@ export function timeAgo(iso: string | number | Date, now = Date.now()) {
 export function pula(n: number) {
   return `P${n.toLocaleString("en-BW", { minimumFractionDigits: 0, maximumFractionDigits: 2 })}`;
 }
+
+/** Milliseconds since epoch. Wrapped so render code reads the clock in one obvious place. */
+export function nowMs() {
+  return Date.now();
+}
+
+export function isPast(date: string | number | Date) {
+  return new Date(date).getTime() < nowMs();
+}
+
+export function daysUntil(date: string | number | Date) {
+  return Math.max(0, Math.ceil((new Date(date).getTime() - nowMs()) / 86400000));
+}
+
+export function isoDaysAgo(days: number) {
+  return new Date(nowMs() - days * 86400000).toISOString();
+}

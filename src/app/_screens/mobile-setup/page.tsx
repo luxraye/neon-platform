@@ -1,21 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, useSyncExternalStore } from "react";
 import { QRCodeSVG } from "qrcode.react";
 import { Download, Share, Smartphone } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { PageHeader } from "@/components/ui/page";
 
+const noop = () => () => {};
+
 type InstallPrompt = Event & { prompt: () => Promise<void>; userChoice: Promise<{ outcome: string }> };
 
 export default function MobileSetupPage() {
-  const [origin, setOrigin] = useState("");
+  const origin = useSyncExternalStore(noop, () => window.location.origin, () => "");
+  const standalone = useSyncExternalStore(noop, () => window.matchMedia("(display-mode: standalone)").matches, () => false);
   const [prompt, setPrompt] = useState<InstallPrompt | null>(null);
-  const [installed, setInstalled] = useState(false);
+  const [accepted, setAccepted] = useState(false);
+  const installed = standalone || accepted;
 
   useEffect(() => {
-    setOrigin(window.location.origin);
-    setInstalled(window.matchMedia("(display-mode: standalone)").matches);
     const onPrompt = (e: Event) => {
       e.preventDefault();
       setPrompt(e as InstallPrompt);
@@ -38,7 +40,7 @@ export default function MobileSetupPage() {
             onClick={async () => {
               await prompt.prompt();
               const choice = await prompt.userChoice;
-              if (choice.outcome === "accepted") setInstalled(true);
+              if (choice.outcome === "accepted") setAccepted(true);
               setPrompt(null);
             }}
           >

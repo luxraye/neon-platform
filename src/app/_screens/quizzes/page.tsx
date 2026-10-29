@@ -8,6 +8,7 @@ import { useStaffRole } from "@/hooks/use-staff-role";
 import { useCohorts } from "@/hooks/use-cohorts";
 import { qQuizzes } from "@/app/data/queries";
 import { roleRoot } from "@/lib/role-root";
+import { isPast } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge, EmptyState, PageHeader } from "@/components/ui/page";
 
@@ -72,7 +73,7 @@ export default function QuizzesPage() {
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
           {quizzes.map((q) => {
             const due = q.due_at ? new Date(q.due_at) : null;
-            const overdue = due ? due.getTime() < Date.now() : false;
+            const overdue = due ? isPast(due) : false;
             return (
               <article key={q.id} className="flex flex-col rounded-2xl border border-border bg-card p-5">
                 <div className="flex items-start justify-between gap-2">

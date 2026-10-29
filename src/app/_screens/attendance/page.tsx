@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { CheckCheck, ClipboardCheck, MessageSquare, WifiOff } from "lucide-react";
@@ -8,6 +8,7 @@ import { useStaffRole } from "@/hooks/use-staff-role";
 import { useCohorts } from "@/hooks/use-cohorts";
 import { useCohortStudents } from "@/hooks/use-cohort-students";
 import { useAttendanceForDate } from "@/hooks/use-attendance";
+import { useOnline } from "@/hooks/use-online";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -34,33 +35,24 @@ export default function AttendancePage() {
   const { isStaff, profileData } = useStaffRole();
   const institutionId = profileData?.profile?.institution_id ?? null;
   const { data: cohorts } = useCohorts(institutionId);
-  const [cohortId, setCohortId] = useState<string | null>(null);
+  const [pickedCohort, setCohortId] = useState<string | null>(null);
   const [date, setDate] = useState(localToday);
   const [saving, setSaving] = useState(false);
   const [status, setStatus] = useState<Record<string, Status>>({});
   const [remarks, setRemarks] = useState<Record<string, string>>({});
   const [openRemark, setOpenRemark] = useState<string | null>(null);
-  const [online, setOnline] = useState(true);
+  const online = useOnline();
 
-  useEffect(() => {
-    const update = () => setOnline(navigator.onLine);
-    update();
-    window.addEventListener("online", update);
-    window.addEventListener("offline", update);
-    return () => {
-      window.removeEventListener("online", update);
-      window.removeEventListener("offline", update);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!cohortId && cohorts?.length) setCohortId(cohorts[0].id);
-  }, [cohorts, cohortId]);
+  // Default to the first cohort until the tutor picks one.
+  const cohortId = pickedCohort ?? cohorts?.[0]?.id ?? null;
 
   const { data: students, isLoading: studentsLoading } = useCohortStudents(institutionId, cohortId);
   const { data: existing, isLoading: attendanceLoading } = useAttendanceForDate(institutionId, cohortId, date);
 
-  useEffect(() => {
+  // When saved attendance loads (or the cohort/date changes), start from what's on record.
+  const [loadedFrom, setLoadedFrom] = useState<typeof existing>(undefined);
+  if (existing !== loadedFrom) {
+    setLoadedFrom(existing);
     const s: Record<string, Status> = {};
     const r: Record<string, string> = {};
     for (const row of existing ?? []) {
@@ -69,7 +61,7 @@ export default function AttendancePage() {
     }
     setStatus(s);
     setRemarks(r);
-  }, [existing]);
+  }
 
   const counts = useMemo(() => {
     const c = { present: 0, late: 0, absent: 0, unmarked: 0 };

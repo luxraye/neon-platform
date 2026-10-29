@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { BookOpen, CalendarDays, ClipboardCheck, ListChecks, Upload, Users, UsersRound } from "lucide-react";
+import { isoDaysAgo } from "@/lib/format";
 import { getDb } from "@/lib/server/db";
 import type { Actor } from "@/lib/auth/identity";
 import { Button } from "@/components/ui/button";
@@ -9,7 +10,7 @@ import { firstName, greeting, shortTime, todayDayOfWeek } from "./helpers";
 export async function TutorOverview({ actor }: { actor: Actor }) {
   const db = getDb();
   const inst = actor.institution_id!;
-  const weekAgo = new Date(Date.now() - 7 * 86400000).toISOString();
+  const weekAgo = isoDaysAgo(7);
 
   const [slots, cohorts, students, quizzes] = await Promise.all([
     db

@@ -5,6 +5,7 @@ import { BILLING_PLAN_DEFINITIONS, BILLING_TIERS, getEffectiveTier } from "@/lib
 import { getUserIdentity } from "@/lib/auth/identity";
 import { getDb } from "@/lib/server/db";
 import { cn } from "@/lib/utils";
+import { daysUntil } from "@/lib/format";
 import { Button } from "@/components/ui/button";
 import { Badge, PageHeader } from "@/components/ui/page";
 
@@ -24,7 +25,7 @@ export default async function PlanPage() {
   const isTrial = !!inst?.is_trial;
   const effective = getEffectiveTier(inst?.subscription_tier, isTrial);
   const trialEnds = inst?.trial_ends_at ? new Date(inst.trial_ends_at) : null;
-  const daysLeft = trialEnds ? Math.max(0, Math.ceil((trialEnds.getTime() - Date.now()) / 86400000)) : null;
+  const daysLeft = trialEnds ? daysUntil(trialEnds) : null;
 
   return (
     <div className="space-y-6">

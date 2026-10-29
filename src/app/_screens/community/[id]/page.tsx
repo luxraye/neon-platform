@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import { ArrowLeft, Send, WifiOff } from "lucide-react";
 import { qForumComments, qForumPost, qPeopleNames } from "@/app/data/queries";
 import { useProfile } from "@/hooks/use-profile";
+import { useOnline } from "@/hooks/use-online";
 import { roleRoot } from "@/lib/role-root";
 import { timeAgo } from "@/lib/format";
 import { Button } from "@/components/ui/button";
@@ -58,23 +59,12 @@ export default function PostDetailPage() {
 
   const [reply, setReply] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [online, setOnline] = useState(true);
+  const online = useOnline();
 
+  // Send any replies saved while offline as soon as we're connected.
   useEffect(() => {
-    const on = () => {
-      setOnline(true);
-      void flushPendingReplies(queryClient);
-    };
-    const off = () => setOnline(false);
-    setOnline(navigator.onLine);
-    window.addEventListener("online", on);
-    window.addEventListener("offline", off);
-    if (navigator.onLine) void flushPendingReplies(queryClient);
-    return () => {
-      window.removeEventListener("online", on);
-      window.removeEventListener("offline", off);
-    };
-  }, [queryClient]);
+    if (online) void flushPendingReplies(queryClient);
+  }, [online, queryClient]);
 
   async function send(e: React.FormEvent) {
     e.preventDefault();

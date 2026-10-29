@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useRef, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { ImageUp, KeyRound, Palette, UserRound } from "lucide-react";
@@ -33,12 +33,17 @@ export default function SettingsPage() {
   const [savingBrand, setSavingBrand] = useState(false);
   const logoRef = useRef<HTMLInputElement>(null);
 
-  useEffect(() => {
-    setFullName(profile?.full_name ?? "");
-  }, [profile?.full_name]);
-  useEffect(() => {
-    if (institution?.primary_color) setColor(institution.primary_color);
-  }, [institution?.primary_color]);
+  // Fill the form once the saved values arrive (and again if they change).
+  const [seenName, setSeenName] = useState<string | null | undefined>(undefined);
+  if (profile && profile.full_name !== seenName) {
+    setSeenName(profile.full_name);
+    setFullName(profile.full_name ?? "");
+  }
+  const [seenColor, setSeenColor] = useState<string | null | undefined>(undefined);
+  if (institution?.primary_color && institution.primary_color !== seenColor) {
+    setSeenColor(institution.primary_color);
+    setColor(institution.primary_color);
+  }
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["profile"] });
 

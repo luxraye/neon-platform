@@ -1,6 +1,6 @@
 "use server";
 
-import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
+import { randomBytes, scryptSync } from "node:crypto";
 import { getDb } from "@/lib/server/db";
 import { getActor } from "@/lib/auth/identity";
 import { cohortBelongsTo } from "@/lib/server/guards";
@@ -21,16 +21,6 @@ function hashQuizPassword(password: string): string {
   const salt = randomBytes(16).toString("hex");
   const digest = scryptSync(password, salt, 64).toString("hex");
   return `${salt}:${digest}`;
-}
-
-function verifyQuizPassword(password: string, storedHash: string): boolean {
-  const [salt, storedDigest] = storedHash.split(":");
-  if (!salt || !storedDigest) return false;
-  const derived = scryptSync(password, salt, 64).toString("hex");
-  const derivedBuffer = Buffer.from(derived, "hex");
-  const storedBuffer = Buffer.from(storedDigest, "hex");
-  if (derivedBuffer.length !== storedBuffer.length) return false;
-  return timingSafeEqual(derivedBuffer, storedBuffer);
 }
 
 export async function createQuiz(formData: {
