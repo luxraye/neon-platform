@@ -1,7 +1,7 @@
 "use server";
 
-import { createServiceRoleClient } from "@/utils/supabase/admin";
-import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { getDb } from "@/lib/server/db";
+import { getActor } from "@/lib/auth/identity";
 
 export type CreatePostResult =
   | { success: true }
@@ -12,8 +12,8 @@ export async function createPost(formData: {
   title: string;
   content: string;
 }): Promise<CreatePostResult> {
-  const identity = await getUserIdentity();
-  if (!identity?.user) {
+  const identity = await getActor();
+  if (!identity) {
     return { success: false, error: "Not authenticated." };
   }
   if (!identity.institution_id) {
@@ -29,8 +29,11 @@ export async function createPost(formData: {
   if (!subject || !title || !content) {
     return { success: false, error: "Subject, title, and content are required." };
   }
+  if (subject.length > 80 || title.length > 160 || content.length > 5000) {
+    return { success: false, error: "Post is too long." };
+  }
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const { error } = await admin.from("forum_posts").insert({
     institution_id: identity.institution_id,
     author_id: identity.user.id,
@@ -51,8 +54,8 @@ export async function createComment(formData: {
   post_id: string;
   content: string;
 }): Promise<CreateCommentResult> {
-  const identity = await getUserIdentity();
-  if (!identity?.user) {
+  const identity = await getActor();
+  if (!identity) {
     return { success: false, error: "Not authenticated." };
   }
 
@@ -64,7 +67,18 @@ export async function createComment(formData: {
     return { success: false, error: "You must be assigned to a cohort before using community." };
   }
 
-  const admin = createServiceRoleClient();
+  if (content.length > 3000) return { success: false, error: "Reply is too long." };
+
+  const admin = getDb();
+  const { data: post } = await admin
+    .from("forum_posts")
+    .select("institution_id")
+    .eq("id", formData.post_id)
+    .maybeSingle();
+  if (!post || post.institution_id !== identity.institution_id) {
+    return { success: false, error: "Post not found." };
+  }
+
   const { error } = await admin.from("forum_comments").insert({
     post_id: formData.post_id,
     author_id: identity.user.id,

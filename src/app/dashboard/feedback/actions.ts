@@ -1,8 +1,9 @@
 "use server";
 
 import { randomUUID } from "crypto";
-import { createClient } from "@/utils/supabase/server";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getSessionUser } from "@/lib/auth/session";
+import { getDb } from "@/lib/server/db";
+import { uploadFile } from "@/lib/server/storage";
 import { getAdminProfiles, notifyUsers } from "@/lib/notify-dispatch";
 import {
   FEEDBACK_SCREENSHOT_BUCKET,
@@ -17,20 +18,17 @@ const ALLOWED_SCREENSHOT_TYPES = ["image/png", "image/jpeg", "image/webp"];
 export type SubmitFeedbackResult = { success: true } | { success: false; error: string };
 
 export async function submitUserFeedback(formData: FormData): Promise<SubmitFeedbackResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+  const user = await getSessionUser();
   if (!user) return { success: false, error: "Not authenticated." };
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const { data: profile } = await admin
     .from("profiles")
-    .select("id, role, institution_id")
+    .select("id, role, institution_id, deleted_at")
     .eq("id", user.id)
     .maybeSingle();
 
-  if (!profile?.id || !profile.role) {
+  if (!profile?.id || !profile.role || profile.deleted_at) {
     return { success: false, error: "Profile not found." };
   }
 
@@ -76,16 +74,12 @@ export async function submitUserFeedback(formData: FormData): Promise<SubmitFeed
     }
     const ext = screenshot.type === "image/png" ? "png" : screenshot.type === "image/webp" ? "webp" : "jpg";
     const institutionPart = profile.institution_id ?? "platform";
-    const path = `${institutionPart}/${profile.id}/${randomUUID()}.${ext}`;
-    const buffer = Buffer.from(await screenshot.arrayBuffer());
-    const { error: uploadError } = await admin.storage
-      .from(FEEDBACK_SCREENSHOT_BUCKET)
-      .upload(path, buffer, { contentType: screenshot.type, upsert: false });
-    if (uploadError) {
-      return { success: false, error: uploadError.message };
+    const path = `${FEEDBACK_SCREENSHOT_BUCKET}/${institutionPart}/${profile.id}/${randomUUID()}.${ext}`;
+    const { url, error: uploadError } = await uploadFile(path, await screenshot.arrayBuffer(), screenshot.type);
+    if (uploadError || !url) {
+      return { success: false, error: uploadError?.message ?? "Upload failed." };
     }
-    const { data: urlData } = admin.storage.from(FEEDBACK_SCREENSHOT_BUCKET).getPublicUrl(path);
-    screenshotUrl = urlData.publicUrl;
+    screenshotUrl = url;
   }
 
   const { error: insertError } = await admin.from("user_feedback").insert({

@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { useProfile } from "@/hooks/use-profile";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qAttempts } from "@/app/data/queries";
 import { useQuery } from "@tanstack/react-query";
 import {
   Card,
@@ -23,54 +23,15 @@ type AttemptRow = {
   focus_violations: number;
   time_spent_seconds: number;
   submitted_at: string;
+  quiz_title: string;
 };
 
-type QuizRow = {
-  id: string;
-  title: string;
-};
 
 function useAttempts(role: string | null, userId: string | null, institutionId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["results-attempts", role ?? "", userId ?? "", institutionId ?? ""],
-    queryFn: async (): Promise<AttemptRow[]> => {
-      if (!role || !userId) return [];
-      let query = supabase
-        .from("quiz_attempts")
-        .select("id, quiz_id, student_id, score, status, submitted_reason, focus_violations, time_spent_seconds, submitted_at")
-        .order("submitted_at", { ascending: false })
-        .limit(300);
-
-      if (role === "student") {
-        query = query.eq("student_id", userId);
-      }
-      const { data, error } = await query;
-      if (error) throw error;
-      return (data ?? []) as AttemptRow[];
-    },
-    enabled: !!role && !!userId && (!!institutionId || role === "student"),
-  });
-}
-
-function useQuizTitles(quizIds: string[]) {
-  const supabase = createBrowserSupabaseClient();
-  return useQuery({
-    queryKey: ["results-quiz-titles", quizIds.join(",")],
-    queryFn: async (): Promise<Record<string, string>> => {
-      if (!quizIds.length) return {};
-      const { data, error } = await supabase
-        .from("quizzes")
-        .select("id, title")
-        .in("id", quizIds);
-      if (error) throw error;
-      const map: Record<string, string> = {};
-      (data as QuizRow[] | null)?.forEach((q) => {
-        map[q.id] = q.title;
-      });
-      return map;
-    },
-    enabled: quizIds.length > 0,
+    queryFn: async (): Promise<AttemptRow[]> => (await qAttempts()) as AttemptRow[],
+    enabled: !!role && !!userId && !!institutionId,
   });
 }
 
@@ -82,11 +43,11 @@ export default function ResultsPage() {
   const [search, setSearch] = useState("");
 
   const { data: attempts, isLoading } = useAttempts(role, userId, institutionId);
-  const quizIds = useMemo(
-    () => [...new Set((attempts ?? []).map((a) => a.quiz_id))],
-    [attempts]
-  );
-  const { data: titleByQuiz } = useQuizTitles(quizIds);
+  const titleByQuiz = useMemo(() => {
+    const map: Record<string, string> = {};
+    for (const a of attempts ?? []) map[a.quiz_id] = a.quiz_title;
+    return map;
+  }, [attempts]);
 
   const filtered = useMemo(() => {
     const q = search.trim().toLowerCase();

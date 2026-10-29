@@ -28,7 +28,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { createTimetableSlot, deleteTimetableSlot } from "./actions";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qStaffNames } from "@/app/data/queries";
 
 const DAYS = [
   { d: 1, label: "Monday" },
@@ -46,7 +46,6 @@ function timeStr(h: number) {
 
 export default function TimetablePage() {
   const queryClient = useQueryClient();
-  const supabase = createBrowserSupabaseClient();
   const { data: profileData } = useProfile();
   const { isStaff, role } = useStaffRole();
   const institutionId = profileData?.profile?.institution_id ?? null;
@@ -63,20 +62,7 @@ export default function TimetablePage() {
   const { data: slots, isLoading } = useTimetableSlots(institutionId, effectiveCohortId);
   const { data: tutorMap } = useQuery({
     queryKey: ["timetable-tutors", institutionId ?? ""],
-    queryFn: async (): Promise<Record<string, string>> => {
-      if (!institutionId) return {};
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .eq("institution_id", institutionId)
-        .in("role", ["tutor", "headmaster"]);
-      if (error) throw error;
-      const map: Record<string, string> = {};
-      (data ?? []).forEach((p) => {
-        map[p.id] = p.full_name || p.email || "Staff";
-      });
-      return map;
-    },
+    queryFn: () => qStaffNames(),
     enabled: !!institutionId,
   });
 

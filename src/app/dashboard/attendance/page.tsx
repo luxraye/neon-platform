@@ -32,7 +32,6 @@ export default function AttendancePage() {
   const { isStaff, profileData } = useStaffRole();
   const institutionId =
     profileData?.profile?.institution_id ??
-    (profileData?.user?.user_metadata?.institution_id as string | undefined) ??
     null;
   const { data: cohorts } = useCohorts(institutionId);
   const [cohortId, setCohortId] = useState<string | null>(null);

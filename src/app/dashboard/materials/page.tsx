@@ -5,7 +5,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useProfile } from "@/hooks/use-profile";
 import { useCohorts } from "@/hooks/use-cohorts";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qMaterials } from "@/app/data/queries";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -47,19 +47,9 @@ type Material = {
 };
 
 function useMaterials(institutionId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["materials", institutionId ?? ""],
-    queryFn: async (): Promise<Material[]> => {
-      if (!institutionId) return [];
-      const { data, error } = await supabase
-        .from("materials")
-        .select("id, title, content_url, description, subject, cohort_id, created_at")
-        .eq("institution_id", institutionId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as Material[];
-    },
+    queryFn: (): Promise<Material[]> => qMaterials(),
     enabled: !!institutionId,
   });
 }
@@ -69,11 +59,9 @@ export default function MaterialsPage() {
   const { data: profileData } = useProfile();
   const role =
     (profileData?.profile?.role ??
-      (profileData?.user?.user_metadata?.role as string | undefined) ??
       undefined) as string | undefined;
   const institutionId =
     profileData?.profile?.institution_id ??
-    (profileData?.user?.user_metadata?.institution_id as string | undefined) ??
     null;
   const { data: cohorts } = useCohorts(institutionId);
   const { data: materials, isLoading, isError, error } = useMaterials(institutionId);

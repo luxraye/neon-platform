@@ -1,7 +1,7 @@
 "use client";
 
 import { useQuery } from "@tanstack/react-query";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qForumPosts } from "@/app/data/queries";
 import { db, type ForumPostRecord } from "@/lib/db";
 
 export type ForumPost = {
@@ -14,21 +14,8 @@ export type ForumPost = {
   created_at: string;
 };
 
-async function fetchPostsFromSupabase(
-  institutionId: string,
-  subject: string | null
-): Promise<ForumPost[]> {
-  const supabase = createBrowserSupabaseClient();
-  let q = supabase
-    .from("forum_posts")
-    .select("id, institution_id, author_id, subject, title, content, created_at")
-    .eq("institution_id", institutionId)
-    .order("created_at", { ascending: false });
-  if (subject) q = q.eq("subject", subject);
-  const { data, error } = await q;
-  if (error) throw error;
-  const posts = (data ?? []) as ForumPost[];
-  return posts;
+async function fetchPostsFromServer(subject: string | null): Promise<ForumPost[]> {
+  return qForumPosts(subject);
 }
 
 async function persistPostsToDexie(posts: ForumPost[]) {
@@ -73,7 +60,7 @@ export function useForumPosts(
       const online = typeof navigator !== "undefined" ? navigator.onLine : true;
 
       if (online) {
-        const posts = await fetchPostsFromSupabase(institutionId, subject);
+        const posts = await fetchPostsFromServer(subject);
         await persistPostsToDexie(posts);
         return posts;
       }

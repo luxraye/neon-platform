@@ -6,7 +6,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useProfile } from "@/hooks/use-profile";
 import { useCohorts } from "@/hooks/use-cohorts";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qPeople } from "@/app/data/queries";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -56,41 +56,17 @@ type StudentProfile = {
 };
 
 function useTutors(institutionId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["staff", "tutors", institutionId ?? ""],
-    queryFn: async (): Promise<TutorProfile[]> => {
-      if (!institutionId) return [];
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, email, full_name, role, deleted_at")
-        .eq("institution_id", institutionId)
-        .eq("role", "tutor")
-        .or(`deleted_at.is.null,deleted_at.gte.${new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()}`)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as TutorProfile[];
-    },
+    queryFn: async (): Promise<TutorProfile[]> => qPeople("tutor", { includeRecentlyRemoved: true }),
     enabled: !!institutionId,
   });
 }
 
 function useStudents(institutionId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["staff", "students", institutionId ?? ""],
-    queryFn: async (): Promise<StudentProfile[]> => {
-      if (!institutionId) return [];
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, email, full_name, role, cohort_id, deleted_at")
-        .eq("institution_id", institutionId)
-        .eq("role", "student")
-        .or(`deleted_at.is.null,deleted_at.gte.${new Date(Date.now() - 72 * 60 * 60 * 1000).toISOString()}`)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as StudentProfile[];
-    },
+    queryFn: async (): Promise<StudentProfile[]> => qPeople("student", { includeRecentlyRemoved: true }),
     enabled: !!institutionId,
   });
 }
@@ -112,21 +88,7 @@ export default function StaffPage() {
   const pathname = usePathname();
   const queryClient = useQueryClient();
   const { data: profileData } = useProfile();
-  const [authInstitutionId, setAuthInstitutionId] = useState<string | null>(null);
-
-  useEffect(() => {
-    const supabase = createBrowserSupabaseClient();
-    supabase.auth.getUser().then(({ data }) => {
-      const inst = (data.user?.user_metadata?.institution_id as string | undefined) ?? null;
-      setAuthInstitutionId(inst);
-    });
-  }, []);
-
-  const institutionId =
-    profileData?.profile?.institution_id ??
-    (profileData?.user?.user_metadata?.institution_id as string | undefined) ??
-    authInstitutionId ??
-    null;
+  const institutionId = profileData?.profile?.institution_id ?? null;
   const isHeadmasterRoute = pathname != null && pathname.startsWith("/headmaster");
   const [provisionedEmails, setProvisionedEmails] = useState<string[]>([]);
   const [staffRefreshNonce, setStaffRefreshNonce] = useState(0);

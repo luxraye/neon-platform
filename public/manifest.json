@@ -1,12 +1,12 @@
 {
-  "name": "Neon Student Management Platform",
+  "name": "Neon: tuition centre management",
   "short_name": "Neon",
-  "description": "Student management and LMS for tuition centres in Botswana.",
-  "start_url": "/",
+  "description": "Student records, attendance, timetables, learning and fees for tuition centres.",
+  "start_url": "/dashboard",
   "scope": "/",
   "display": "standalone",
-  "background_color": "#020617",
-  "theme_color": "#020617",
+  "background_color": "#0e1024",
+  "theme_color": "#0e1024",
   "orientation": "portrait",
   "icons": [
     {

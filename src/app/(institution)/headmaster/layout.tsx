@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import Image from "next/image";
 import HeadmasterSidebar from "@/components/navigation/HeadmasterSidebar";
-import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { getUserIdentity } from "@/lib/auth/identity";
 
 export const dynamic = "force-dynamic";
 

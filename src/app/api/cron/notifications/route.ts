@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getDb } from "@/lib/server/db";
 import {
   getHeadmastersForInstitution,
   getStudentsForMaterialAudience,
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const today = new Date();
   const y = today.getUTCFullYear();
   const m = String(today.getUTCMonth() + 1).padStart(2, "0");

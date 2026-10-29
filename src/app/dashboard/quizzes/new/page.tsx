@@ -32,7 +32,6 @@ export default function NewQuizPage() {
   const { data: profileData } = useProfile();
   const institutionId =
     profileData?.profile?.institution_id ??
-    (profileData?.user?.user_metadata?.institution_id as string | undefined) ??
     null;
   const quizzesHref = pathname.startsWith("/tutor") ? "/tutor/quizzes" : "/dashboard/quizzes";
   const { data: cohorts } = useCohorts(institutionId);

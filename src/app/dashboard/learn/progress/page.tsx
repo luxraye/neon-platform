@@ -1,7 +1,7 @@
 "use client";
 
 import { useProfile } from "@/hooks/use-profile";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qAttempts } from "@/app/data/queries";
 import { useQuery } from "@tanstack/react-query";
 import Link from "next/link";
 import { Button } from "@/components/ui/button";
@@ -15,32 +15,20 @@ type AttemptWithQuiz = {
 };
 
 function useMyAttempts(userId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["my-quiz-attempts", userId ?? ""],
     queryFn: async (): Promise<AttemptWithQuiz[]> => {
-      if (!userId) return [];
-      const { data: attempts, error: e1 } = await supabase
-        .from("quiz_attempts")
-        .select("id, quiz_id, score, submitted_at")
-        .eq("student_id", userId)
-        .order("submitted_at", { ascending: true });
-      if (e1) throw e1;
-      if (!attempts?.length) return [];
-      const quizIds = [...new Set(attempts.map((a) => a.quiz_id))];
-      const { data: quizzes, error: e2 } = await supabase
-        .from("quizzes")
-        .select("id, title")
-        .in("id", quizIds);
-      if (e2) throw e2;
-      const titleByQuiz: Record<string, string> = {};
-      (quizzes ?? []).forEach((q: { id: string; title: string }) => {
-        titleByQuiz[q.id] = q.title;
-      });
-      return (attempts ?? []).map((a) => ({
-        ...a,
-        quiz_title: titleByQuiz[a.quiz_id] ?? "Quiz",
-      })) as AttemptWithQuiz[];
+      const rows = await qAttempts();
+      return rows
+        .filter((a) => a.status !== "in_progress")
+        .map((a) => ({
+          id: a.id,
+          quiz_id: a.quiz_id,
+          score: Number(a.score ?? 0),
+          submitted_at: a.submitted_at,
+          quiz_title: a.quiz_title,
+        }))
+        .sort((a, b) => a.submitted_at.localeCompare(b.submitted_at));
     },
     enabled: !!userId,
   });

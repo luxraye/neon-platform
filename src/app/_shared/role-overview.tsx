@@ -1,7 +1,7 @@
 import Link from "next/link";
-import { createClient } from "@/utils/supabase/server";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
-import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { redirect } from "next/navigation";
+import { getDb } from "@/lib/server/db";
+import { getUserIdentity } from "@/lib/auth/identity";
 import { getCohorts } from "@/app/dashboard/cohorts/actions";
 import { getStaff } from "@/app/dashboard/staff/actions";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -37,20 +37,14 @@ function pathFor(role: string, target: string) {
 }
 
 export default async function RoleOverviewPage() {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("full_name, role, cohort_id, institution_id")
-    .eq("id", user!.id)
-    .maybeSingle();
-
   const identity = await getUserIdentity();
+  if (!identity) redirect("/login");
+  const supabase = getDb();
+  const user = identity.user;
+  const profile = identity.profile;
   const institutionId = identity?.institution_id ?? profile?.institution_id ?? null;
   const role =
-    ((identity?.role ?? profile?.role ?? user?.user_metadata?.role ?? "—") as string | null)?.toLowerCase() ??
+    ((identity?.role ?? profile?.role ?? "—") as string | null)?.toLowerCase() ??
     "—";
   const isStudentPending = role === "student" && profile && profile.cohort_id == null;
 
@@ -94,7 +88,7 @@ export default async function RoleOverviewPage() {
 
   // Student assigned overview (keep content; links point to new student routes)
   if (role === "student" && profile?.cohort_id && institutionId) {
-    const todayDay = new Date().getDay();
+    const todayDay = new Date().getDay() || 7;
     const { data: todaySlots } = await supabase
       .from("timetables")
       .select("id, subject, start_time, end_time, room")
@@ -107,6 +101,7 @@ export default async function RoleOverviewPage() {
     const { data: latestMaterials } = await supabase
       .from("materials")
       .select("id, title, subject")
+      .eq("institution_id", institutionId)
       .eq("cohort_id", profile.cohort_id)
       .order("created_at", { ascending: false })
       .limit(3);
@@ -172,7 +167,7 @@ export default async function RoleOverviewPage() {
 
   // Tutor overview (links point to tutor routes)
   if (role === "tutor" && institutionId) {
-    const todayDay = new Date().getDay();
+    const todayDay = new Date().getDay() || 7;
     const { data: todaySlots } = await supabase
       .from("timetables")
       .select("id, subject, start_time, end_time")
@@ -189,7 +184,7 @@ export default async function RoleOverviewPage() {
     const { count: pendingCount } = await supabase
       .from("quiz_attempts")
       .select("*", { count: "exact", head: true })
-      .in("quiz_id", quizIds.length ? quizIds : ["00000000-0000-0000-0000-000000000000"])
+      .in("quiz_id", quizIds)
       .gte("submitted_at", sevenDaysAgo);
 
     return (
@@ -261,7 +256,7 @@ export default async function RoleOverviewPage() {
     const tutorCount = staffPayload.tutors.length;
     const studentCount = staffPayload.students.length;
 
-    const admin = createServiceRoleClient();
+    const admin = getDb();
     const startOfMonth = new Date();
     startOfMonth.setDate(1);
     startOfMonth.setHours(0, 0, 0, 0);
@@ -280,7 +275,7 @@ export default async function RoleOverviewPage() {
 
     // Upcoming timetable slots this week (next 7 days)
     const dayNames = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
-    const todayDay = new Date().getDay();
+    const todayDay = new Date().getDay() || 7;
     const { data: timetableSlots } = await admin
       .from("timetables")
       .select("id, subject, start_time, end_time, room, day_of_week, cohort_id")

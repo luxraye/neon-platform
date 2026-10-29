@@ -31,7 +31,6 @@ import {
 } from "@/components/ui/table";
 import { LogoutButton } from "@/components/auth/logout-button";
 import { ThemeToggle } from "@/components/theme/theme-toggle";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
 import { calculateTieredMonthlyDue, getTierBaseFee, PER_STUDENT_FEE } from "@/lib/billing";
 
 type InstitutionRow = {
@@ -119,18 +118,10 @@ export function AdminCommandCenter({
     setOpen(true);
   }
 
+  // Refresh every minute so new leads show up without a reload.
   useEffect(() => {
-    const supabase = createBrowserSupabaseClient();
-    const channel = supabase
-      .channel("leads-realtime")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "leads" }, () => {
-        router.refresh();
-      })
-      .subscribe();
-
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const id = window.setInterval(() => router.refresh(), 60_000);
+    return () => window.clearInterval(id);
   }, [router]);
 
   const handleExtendTrial = async (institutionId: string) => {

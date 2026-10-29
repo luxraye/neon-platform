@@ -1,8 +1,9 @@
 "use server";
 
 import { randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
-import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { getDb } from "@/lib/server/db";
+import { getActor } from "@/lib/auth/identity";
+import { cohortBelongsTo } from "@/lib/server/guards";
 import { broadcastNewQuizToStudents } from "@/lib/notify-dispatch";
 
 export type QuizQuestion = {
@@ -43,12 +44,8 @@ export async function createQuiz(formData: {
   /** Optional YYYY-MM-DD — reminders use cron + email. */
   due_at?: string | null;
 }): Promise<CreateQuizResult> {
-  const identity = await getUserIdentity();
-  if (!identity?.user) {
-    return { success: false, error: "Not authenticated." };
-  }
-
-  if (!identity.institution_id || (identity.role !== "headmaster" && identity.role !== "tutor")) {
+  const identity = await getActor(["headmaster", "tutor"]);
+  if (!identity?.institution_id) {
     return { success: false, error: "Only tutors and headmasters can create quizzes." };
   }
 
@@ -93,10 +90,17 @@ export async function createQuiz(formData: {
     }
   }
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const securityMode = formData.security_mode ?? "medium";
   const maxFocusViolations = Math.min(10, Math.max(1, formData.max_focus_violations ?? 2));
   const cohortId = formData.cohort_id?.trim() || null;
+  if (!(await cohortBelongsTo(cohortId, identity.institution_id))) {
+    return { success: false, error: "That cohort is not in your centre." };
+  }
+  if (normalizedQuestions.length > 200) {
+    return { success: false, error: "A quiz can have at most 200 questions." };
+  }
+  const timeLimit = Math.min(300, Math.max(1, Math.floor(formData.time_limit_minutes ?? 30)));
   const dueRaw = formData.due_at?.trim();
   const dueAt = dueRaw && /^\d{4}-\d{2}-\d{2}$/.test(dueRaw) ? dueRaw : null;
 
@@ -105,7 +109,7 @@ export async function createQuiz(formData: {
     cohort_id: cohortId,
     title,
     questions: normalizedQuestions as unknown,
-    time_limit_minutes: formData.time_limit_minutes ?? 30,
+    time_limit_minutes: timeLimit,
     access_password_hash: hashQuizPassword(accessPassword),
     security_mode: securityMode,
     max_focus_violations: maxFocusViolations,

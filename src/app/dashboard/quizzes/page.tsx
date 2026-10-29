@@ -5,7 +5,7 @@ import { usePathname } from "next/navigation";
 import { useStaffRole } from "@/hooks/use-staff-role";
 import { useProfile } from "@/hooks/use-profile";
 import { useCohorts } from "@/hooks/use-cohorts";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qQuizzes } from "@/app/data/queries";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import {
@@ -27,19 +27,9 @@ type Quiz = {
 };
 
 function useQuizzes(institutionId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["quizzes", institutionId ?? ""],
-    queryFn: async (): Promise<Quiz[]> => {
-      if (!institutionId) return [];
-      const { data, error } = await supabase
-        .from("quizzes")
-        .select("id, title, cohort_id, time_limit_minutes, max_focus_violations, created_at")
-        .eq("institution_id", institutionId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as Quiz[];
-    },
+    queryFn: (): Promise<Quiz[]> => qQuizzes(),
     enabled: !!institutionId,
   });
 }
@@ -50,7 +40,6 @@ export default function QuizzesPage() {
   const { isStaff: canManage, role } = useStaffRole();
   const institutionId =
     profileData?.profile?.institution_id ??
-    (profileData?.user?.user_metadata?.institution_id as string | undefined) ??
     null;
   const { data: cohorts } = useCohorts(institutionId);
   const { data: quizzes, isLoading, isError, error } = useQuizzes(institutionId);

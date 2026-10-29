@@ -7,8 +7,9 @@
 @theme inline {
   --color-background: var(--background);
   --color-foreground: var(--foreground);
-  --font-sans: var(--font-sans);
-  --font-mono: var(--font-geist-mono);
+  --font-sans: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-display: var(--font-jakarta), ui-sans-serif, system-ui, sans-serif;
+  --font-mono: var(--font-geist-mono), ui-monospace, monospace;
   --color-sidebar-ring: var(--sidebar-ring);
   --color-sidebar-border: var(--sidebar-border);
   --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
@@ -16,6 +17,7 @@
   --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
   --color-sidebar-primary: var(--sidebar-primary);
   --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar-muted: var(--sidebar-muted);
   --color-sidebar: var(--sidebar);
   --color-chart-5: var(--chart-5);
   --color-chart-4: var(--chart-4);
@@ -26,6 +28,13 @@
   --color-input: var(--input);
   --color-border: var(--border);
   --color-destructive: var(--destructive);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-neon: var(--neon);
+  --color-neon-foreground: var(--neon-foreground);
+  --color-ink: var(--ink);
   --color-accent-foreground: var(--accent-foreground);
   --color-accent: var(--accent);
   --color-muted-foreground: var(--muted-foreground);
@@ -47,84 +56,145 @@
   --radius-4xl: calc(var(--radius) * 2.6);
 }
 
+/*
+ * Neon design tokens.
+ * Ink (near-black navy) carries the structure, electric violet is the action colour, and the
+ * "neon" lime is a rare highlight: active nav, key numbers, the logo. Centres on the Elite
+ * plan override --brand-primary with their own colour.
+ */
 :root {
-  --background: #f4f7fc;
-  --foreground: #0b1323;
+  --ink: #0e1024;
+  --neon: #c6f432;
+  --neon-foreground: #15200a;
+
+  --background: #f6f6fa;
+  --foreground: #0e1024;
   --card: #ffffff;
-  --card-foreground: #0b1323;
+  --card-foreground: #0e1024;
   --popover: #ffffff;
-  --popover-foreground: #0b1323;
-  --primary: #003366;
+  --popover-foreground: #0e1024;
+  --primary: #4b2ee8;
   --primary-foreground: #ffffff;
-  --secondary: #e8f0fb;
-  --secondary-foreground: #0e2f57;
-  --muted: #eef3fb;
-  --muted-foreground: #52627b;
-  --accent: #dcecff;
-  --accent-foreground: #0e2f57;
-  --destructive: #dc2626;
-  --border: #d8e1ef;
-  --input: #d8e1ef;
-  --ring: #0066cc;
-  --chart-1: #003366;
-  --chart-2: #0066cc;
-  --chart-3: #2f9e44;
-  --chart-4: #f59f00;
-  --chart-5: #f76707;
-  --radius: 0.625rem;
-  --sidebar: #0c2748;
-  --sidebar-foreground: #f8fbff;
-  --sidebar-primary: #0066cc;
-  --sidebar-primary-foreground: #ffffff;
-  --sidebar-accent: #123b6b;
+  --secondary: #efecff;
+  --secondary-foreground: #2a1b8f;
+  --muted: #f0f0f6;
+  --muted-foreground: #5b5f7a;
+  --accent: #f0fbd6;
+  --accent-foreground: #263a06;
+  --destructive: #d92d20;
+  --success: #12805c;
+  --success-foreground: #ffffff;
+  --warning: #b54708;
+  --warning-foreground: #ffffff;
+  --border: #e4e4ee;
+  --input: #dcdce8;
+  --ring: #6d52ff;
+  --chart-1: #4b2ee8;
+  --chart-2: #8b76ff;
+  --chart-3: #12805c;
+  --chart-4: #e6a700;
+  --chart-5: #d92d20;
+  --radius: 0.75rem;
+
+  --sidebar: #0e1024;
+  --sidebar-foreground: #e9e9f5;
+  --sidebar-muted: #9a9cb8;
+  --sidebar-primary: #c6f432;
+  --sidebar-primary-foreground: #15200a;
+  --sidebar-accent: #1b1e3a;
   --sidebar-accent-foreground: #ffffff;
-  --sidebar-border: #1c4678;
-  --sidebar-ring: #3b89db;
+  --sidebar-border: #23264a;
+  --sidebar-ring: #8b76ff;
+
+  --brand-primary: var(--primary);
 }
 
 .dark {
-  --background: #080f1c;
-  --foreground: #e9f1ff;
-  --card: #0f1b2f;
-  --card-foreground: #e9f1ff;
-  --popover: #0f1b2f;
-  --popover-foreground: #e9f1ff;
-  --primary: #4b9cff;
-  --primary-foreground: #03152f;
-  --secondary: #13243f;
-  --secondary-foreground: #d8e7ff;
-  --muted: #12213a;
-  --muted-foreground: #9ab0d3;
-  --accent: #1a3155;
-  --accent-foreground: #dce9ff;
-  --destructive: #f87171;
-  --border: rgba(153, 184, 232, 0.2);
-  --input: rgba(153, 184, 232, 0.28);
-  --ring: #5aa3ff;
-  --chart-1: #8dbdff;
-  --chart-2: #57a4ff;
-  --chart-3: #5ed08e;
-  --chart-4: #ffcd6b;
-  --chart-5: #ff935c;
-  --sidebar: #0a1a31;
-  --sidebar-foreground: #f0f6ff;
-  --sidebar-primary: #3f95ff;
-  --sidebar-primary-foreground: #03152f;
-  --sidebar-accent: #14325a;
-  --sidebar-accent-foreground: #e4efff;
-  --sidebar-border: rgba(127, 165, 219, 0.28);
-  --sidebar-ring: #63a9ff;
+  --background: #0a0b17;
+  --foreground: #ececf6;
+  --card: #12142a;
+  --card-foreground: #ececf6;
+  --popover: #151832;
+  --popover-foreground: #ececf6;
+  --primary: #8b76ff;
+  --primary-foreground: #0b0920;
+  --secondary: #1d1a44;
+  --secondary-foreground: #d9d3ff;
+  --muted: #181a33;
+  --muted-foreground: #a0a3c0;
+  --accent: #1f2a0d;
+  --accent-foreground: #dcf79a;
+  --destructive: #f97066;
+  --success: #3ccb8f;
+  --success-foreground: #04231a;
+  --warning: #fdb022;
+  --warning-foreground: #2b1700;
+  --border: rgba(160, 163, 220, 0.16);
+  --input: rgba(160, 163, 220, 0.24);
+  --ring: #a593ff;
+  --chart-1: #a593ff;
+  --chart-2: #6d52ff;
+  --chart-3: #3ccb8f;
+  --chart-4: #fdb022;
+  --chart-5: #f97066;
+
+  --sidebar: #07080f;
+  --sidebar-foreground: #e9e9f5;
+  --sidebar-muted: #8c8fae;
+  --sidebar-primary: #c6f432;
+  --sidebar-primary-foreground: #15200a;
+  --sidebar-accent: #151731;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #1b1d38;
+  --sidebar-ring: #a593ff;
 }
 
 @layer base {
   * {
     @apply border-border outline-ring/50;
   }
-  body {
-    @apply bg-background text-foreground;
-  }
   html {
     @apply font-sans;
+    -webkit-tap-highlight-color: transparent;
+  }
+  body {
+    @apply bg-background text-foreground;
+    font-feature-settings: "ss01", "cv11";
+  }
+  h1,
+  h2,
+  h3 {
+    @apply tracking-tight;
+  }
+  :focus-visible {
+    @apply outline-2 outline-offset-2 outline-ring;
+  }
+}
+
+@layer utilities {
+  /* Subtle dotted grid used behind hero and auth panels. */
+  .bg-grid {
+    background-image: radial-gradient(circle at 1px 1px, rgb(255 255 255 / 0.08) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  .bg-grid-light {
+    background-image: radial-gradient(circle at 1px 1px, rgb(14 16 36 / 0.07) 1px, transparent 0);
+    background-size: 22px 22px;
+  }
+  .text-balance {
+    text-wrap: balance;
+  }
+  .neon-glow {
+    box-shadow: 0 0 0 1px rgb(198 244 50 / 0.35), 0 8px 30px -8px rgb(198 244 50 / 0.45);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
   }
 }
 

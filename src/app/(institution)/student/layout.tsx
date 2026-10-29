@@ -1,7 +1,7 @@
 import { redirect } from "next/navigation";
 import { RoleShell } from "@/components/navigation/RoleShell";
 import StudentSidebar from "@/components/navigation/StudentSidebar";
-import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { getUserIdentity } from "@/lib/auth/identity";
 
 export const dynamic = "force-dynamic";
 

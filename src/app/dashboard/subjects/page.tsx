@@ -3,7 +3,7 @@
 import { useEffect, useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qMaterials } from "@/app/data/queries";
 import { useProfile } from "@/hooks/use-profile";
 import { useCohorts } from "@/hooks/use-cohorts";
 import { useForumPosts } from "@/hooks/use-forum-posts";
@@ -57,29 +57,10 @@ function normalizeSubject(s: string | null | undefined): string | null {
 
 export default function SubjectsPage() {
   const queryClient = useQueryClient();
-  const supabase = createBrowserSupabaseClient();
-
   const { data: profileData } = useProfile();
   const { isStaff: canManage } = useStaffRole();
 
-  const [authInstitutionId, setAuthInstitutionId] = useState<string | null>(null);
-  useEffect(() => {
-    let mounted = true;
-    supabase.auth.getUser().then(({ data }) => {
-      if (!mounted) return;
-      const inst =
-        (data.user?.user_metadata?.institution_id as string | undefined) ?? null;
-      setAuthInstitutionId(inst);
-    });
-    return () => {
-      mounted = false;
-    };
-  }, [supabase]);
-
-  const institutionId =
-    profileData?.profile?.institution_id ??
-    (profileData?.user?.user_metadata?.institution_id as string | undefined) ??
-    authInstitutionId;
+  const institutionId = profileData?.profile?.institution_id ?? null;
 
   const { data: cohorts } = useCohorts(institutionId);
 
@@ -116,12 +97,7 @@ export default function SubjectsPage() {
       setSubjects([]);
       return;
     }
-    const { data, error } = await supabase
-      .from("materials")
-      .select("subject")
-      .eq("institution_id", institutionId)
-      .order("created_at", { ascending: false });
-    if (error) throw error;
+    const data = await qMaterials();
 
     const distinct = Array.from(
       new Set(
@@ -153,19 +129,16 @@ export default function SubjectsPage() {
     if (!institutionId || !activeSubjectResolved) return;
     setDocsLoading(true);
     setDocsError(null);
-    const { data, error } = await supabase
-      .from("materials")
-      .select("id, title, content_url, description, subject, cohort_id, created_at")
-      .eq("institution_id", institutionId)
-      .eq("subject", activeSubjectResolved)
-      .order("created_at", { ascending: false });
-    if (error) {
-      setDocsError(error.message);
+    let data: MaterialRow[] = [];
+    try {
+      data = await qMaterials({ subject: activeSubjectResolved });
+    } catch (e) {
+      setDocsError(e instanceof Error ? e.message : "Could not load documents.");
       setDocuments([]);
       setDocsLoading(false);
       return;
     }
-    setDocuments((data ?? []) as MaterialRow[]);
+    setDocuments(data);
     setDocsLoading(false);
   };
 

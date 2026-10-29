@@ -10,37 +10,34 @@ import {
   CardTitle,
 } from "@/components/ui/card";
 import { toast } from "sonner";
-import { createQuizResultNotification, submitQuizAttempt } from "./actions";
+import { submitQuizAttempt } from "./actions";
 
-type MultipleChoiceQuestion = {
-  type?: "multiple_choice";
+/** Questions arrive without the answer key; scoring happens on the server. */
+type QuizQuestion = {
   question: string;
   options: string[];
-  correctIndex: number;
 };
-
-type QuizQuestion = MultipleChoiceQuestion;
 
 type Quiz = {
   id: string;
   title: string;
   time_limit_minutes: number;
-  questions: unknown;
 };
 
 export function QuizTaker({
   quiz,
+  questions,
   attemptId,
   maxFocusViolations,
   onClose,
 }: {
   quiz: Quiz;
+  questions: QuizQuestion[];
   attemptId: string;
   maxFocusViolations: number;
   onClose: () => void;
 }) {
   const router = useRouter();
-  const questions = (Array.isArray(quiz.questions) ? quiz.questions : []) as unknown as QuizQuestion[];
   const [currentIndex, setCurrentIndex] = useState(0);
   const [answers, setAnswers] = useState<Record<number, number>>({});
   const [submitted, setSubmitted] = useState(false);
@@ -143,12 +140,6 @@ export function QuizTaker({
       toast.error(result.error);
       return;
     }
-    // Create an in-app notification (service role on the server).
-    try {
-      await createQuizResultNotification({ quizTitle: quiz.title, score: result.score });
-    } catch {
-      // ignore notification failures; quiz attempt is the source of truth
-    }
     toast.success(`Submitted. Score: ${result.score.toFixed(0)}%`);
     onClose();
     router.refresh();
@@ -192,7 +183,7 @@ export function QuizTaker({
           <CardTitle className="text-base">{q.question}</CardTitle>
         </CardHeader>
         <CardContent className="space-y-2">
-          {(q as MultipleChoiceQuestion).options.map((opt, oIndex) => (
+          {q.options.map((opt, oIndex) => (
             <label
               key={oIndex}
               className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${

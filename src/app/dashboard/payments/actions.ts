@@ -1,7 +1,8 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getActor } from "@/lib/auth/identity";
+import { profileBelongsTo } from "@/lib/server/guards";
+import { getDb } from "@/lib/server/db";
 import { notifyUsers } from "@/lib/notify-dispatch";
 import type { PlatformInvoice, PlatformPaymentTransaction } from "@/lib/platform-payments";
 
@@ -13,35 +14,25 @@ export async function recordCashPayment(formData: {
   student_id: string;
   amount: number;
 }): Promise<RecordPaymentResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { success: false, error: "Not authenticated." };
-  }
-
-  const { data: profile } = await supabase
-    .from("profiles")
-    .select("role, institution_id")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (profile?.role !== "headmaster" || !profile.institution_id) {
+  const actor = await getActor(["headmaster"]);
+  if (!actor?.institution_id) {
     return { success: false, error: "Only headmasters can record payments." };
   }
 
-  const amount = Number(formData.amount);
-  if (!formData.student_id || !Number.isFinite(amount) || amount <= 0) {
+  const amount = Math.round(Number(formData.amount) * 100) / 100;
+  if (!formData.student_id || !Number.isFinite(amount) || amount <= 0 || amount > 1_000_000) {
     return { success: false, error: "Valid student and amount are required." };
   }
+  if (!(await profileBelongsTo(formData.student_id, actor.institution_id, "student"))) {
+    return { success: false, error: "Student not found in your centre." };
+  }
 
-  const { error } = await supabase.from("cash_payments").insert({
-    institution_id: profile.institution_id,
+  const { error } = await getDb().from("cash_payments").insert({
+    institution_id: actor.institution_id,
     student_id: formData.student_id,
     amount,
     paid_at: new Date().toISOString(),
+    recorded_by: actor.user.id,
   });
 
   if (error) return { success: false, error: error.message };
@@ -57,27 +48,13 @@ export type SendFeeRemindersResult =
  * (Heuristic "pending" until we have an explicit invoicing table.)
  */
 export async function sendFeeReminders(): Promise<SendFeeRemindersResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
-
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("role, institution_id")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (
-    (profile?.role !== "headmaster" && profile?.role !== "admin") ||
-    !profile?.institution_id
-  ) {
-    return { success: false, error: "Only headmasters (or admins) can send reminders." };
+  const actor = await getActor(["headmaster"]);
+  if (!actor?.institution_id) {
+    return { success: false, error: "Only headmasters can send reminders." };
   }
 
-  const instId = profile.institution_id;
+  const admin = getDb();
+  const instId = actor.institution_id;
   const startOfMonth = new Date();
   startOfMonth.setDate(1);
   startOfMonth.setHours(0, 0, 0, 0);
@@ -87,7 +64,8 @@ export async function sendFeeReminders(): Promise<SendFeeRemindersResult> {
     .from("profiles")
     .select("id, email")
     .eq("institution_id", instId)
-    .eq("role", "student");
+    .eq("role", "student")
+    .is("deleted_at", null);
   if (studentsError) return { success: false, error: studentsError.message };
 
   const studentIds = (students ?? []).map((s: { id: string }) => s.id);
@@ -135,25 +113,12 @@ type PlatformBillingSnapshot = {
 };
 
 export async function getPlatformBillingSnapshot(): Promise<PlatformBillingSnapshot> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { invoices: [], transactions: [], available: false, message: "Not authenticated." };
-  }
-
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("role, institution_id")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  if (!profile?.institution_id || profile.role !== "headmaster") {
+  const actor = await getActor(["headmaster"]);
+  if (!actor?.institution_id) {
     return { invoices: [], transactions: [], available: false, message: "Headmaster access only." };
   }
+  const admin = getDb();
+  const profile = { institution_id: actor.institution_id };
 
   const invoicesQuery = await admin
     .from("platform_invoices")
@@ -167,7 +132,7 @@ export async function getPlatformBillingSnapshot(): Promise<PlatformBillingSnaps
       invoices: [],
       transactions: [],
       available: false,
-      message: "Platform billing tables are not yet enabled in this environment.",
+      message: "Could not load platform invoices.",
     };
   }
 
@@ -183,7 +148,7 @@ export async function getPlatformBillingSnapshot(): Promise<PlatformBillingSnaps
       invoices: (invoicesQuery.data ?? []) as PlatformInvoice[],
       transactions: [],
       available: false,
-      message: "Transactions table is not yet enabled in this environment.",
+      message: "Could not load payment transactions.",
     };
   }
 

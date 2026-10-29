@@ -1,10 +1,10 @@
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getDb } from "@/lib/server/db";
 import { AdminLeadsContent } from "./admin-leads-content";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminLeadsPage() {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
 
   const { data: leads } = await admin
     .from("leads")

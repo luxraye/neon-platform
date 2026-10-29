@@ -1,0 +1,12 @@
+rules_version = '2';
+
+// Neon reads and writes Firestore only from the server (Firebase Admin SDK), where every
+// query is scoped to the signed-in user's centre. The Admin SDK bypasses these rules, so
+// browsers get no direct access at all. This keeps one centre's data away from another.
+service cloud.firestore {
+  match /databases/{database}/documents {
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

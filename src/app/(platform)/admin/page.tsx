@@ -1,11 +1,11 @@
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getDb } from "@/lib/server/db";
 import { AdminDashboard } from "./admin-dashboard";
 import { getPendingDeletions } from "./actions";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPage() {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const pendingDeletions = await getPendingDeletions();
 
   const { data: institutions } = await admin

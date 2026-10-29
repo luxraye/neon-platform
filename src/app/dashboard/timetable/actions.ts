@@ -1,7 +1,8 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getActor } from "@/lib/auth/identity";
+import { cohortBelongsTo } from "@/lib/server/guards";
+import { getDb } from "@/lib/server/db";
 
 export type TimetableSlot = {
   id: string;
@@ -27,32 +28,31 @@ export async function createTimetableSlot(form: {
   subject: string;
   room?: string;
 }): Promise<CreateSlotResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
+  const actor = await getActor(["headmaster", "tutor"]);
+  if (!actor?.institution_id) return { success: false, error: "Only staff can add timetable slots." };
 
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("role, institution_id")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (profile?.role !== "headmaster" && profile?.role !== "tutor")
-    return { success: false, error: "Only staff can add timetable slots." };
-  if (!profile?.institution_id) return { success: false, error: "No institution." };
+  const day = Number(form.day_of_week);
+  const timeOk = (t: string) => /^([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?$/.test(t ?? "");
+  if (!Number.isInteger(day) || day < 1 || day > 7) return { success: false, error: "Choose a valid day." };
+  if (!timeOk(form.start_time) || !timeOk(form.end_time)) return { success: false, error: "Enter valid times." };
+  if (form.end_time <= form.start_time) return { success: false, error: "End time must be after start time." };
+  if (!form.subject?.trim()) return { success: false, error: "Subject is required." };
+  if (!form.cohort_id || !(await cohortBelongsTo(form.cohort_id, actor.institution_id))) {
+    return { success: false, error: "Choose a cohort from your centre." };
+  }
+
+  const admin = getDb();
 
   const { data: row, error } = await admin
     .from("timetables")
     .insert({
-      institution_id: profile.institution_id,
+      institution_id: actor.institution_id,
       cohort_id: form.cohort_id,
-      day_of_week: form.day_of_week,
+      day_of_week: day,
       start_time: form.start_time,
       end_time: form.end_time,
       subject: form.subject.trim(),
-      tutor_id: user.id,
+      tutor_id: actor.user.id,
       room: form.room?.trim() || null,
     })
     .select("id")
@@ -62,22 +62,14 @@ export async function createTimetableSlot(form: {
 }
 
 export async function deleteTimetableSlot(slotId: string): Promise<DeleteSlotResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
+  const actor = await getActor(["headmaster", "tutor"]);
+  if (!actor?.institution_id) return { success: false, error: "Only staff can delete slots." };
 
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("role, institution_id")
-    .eq("id", user.id)
-    .maybeSingle();
-  if (profile?.role !== "headmaster" && profile?.role !== "tutor")
-    return { success: false, error: "Only staff can delete slots." };
-
-  const { error } = await admin.from("timetables").delete().eq("id", slotId).eq("institution_id", profile!.institution_id);
+  const { error } = await getDb()
+    .from("timetables")
+    .delete()
+    .eq("id", slotId)
+    .eq("institution_id", actor.institution_id);
   if (error) return { success: false, error: error.message };
   return { success: true };
 }

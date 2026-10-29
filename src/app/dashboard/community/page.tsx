@@ -7,7 +7,7 @@ import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useProfile } from "@/hooks/use-profile";
 import { useForumPosts } from "@/hooks/use-forum-posts";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qPeopleNames } from "@/app/data/queries";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -43,21 +43,9 @@ const SUBJECTS = ["Mathematics", "Science", "English", "General"];
 type AuthorMap = Record<string, string>;
 
 function usePostAuthors(postIds: string[]) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
-    queryKey: ["forum-authors", postIds.sort().join(",")],
-    queryFn: async (): Promise<AuthorMap> => {
-      if (postIds.length === 0) return {};
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", [...new Set(postIds)]);
-      const map: AuthorMap = {};
-      (data ?? []).forEach((p: { id: string; full_name: string | null; email: string }) => {
-        map[p.id] = p.full_name || p.email;
-      });
-      return map;
-    },
+    queryKey: ["forum-authors", [...postIds].sort().join(",")],
+    queryFn: (): Promise<AuthorMap> => qPeopleNames(postIds),
     enabled: postIds.length > 0,
   });
 }
@@ -68,16 +56,13 @@ export default function CommunityPage() {
   const { data: profileData } = useProfile();
   const role =
     (profileData?.profile?.role ??
-      (profileData?.user?.user_metadata?.role as string | undefined) ??
       null) as string | null;
   const cohortId =
     profileData?.profile?.cohort_id ??
-    (profileData?.user?.user_metadata?.cohort_id as string | undefined) ??
     null;
   const studentBlocked = role === "student" && !cohortId;
   const institutionId =
     profileData?.profile?.institution_id ??
-    (profileData?.user?.user_metadata?.institution_id as string | undefined) ??
     null;
   const [subjectFilter, setSubjectFilter] = useState<string | null>(null);
   const { data: posts, isLoading, isError, error } = useForumPosts(

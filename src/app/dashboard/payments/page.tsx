@@ -4,7 +4,7 @@ import { useState } from "react";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { useProfile } from "@/hooks/use-profile";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qCashPayments, qPeople } from "@/app/data/queries";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -62,39 +62,17 @@ type PlatformTransactionRow = {
 };
 
 function useStudents(institutionId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["payments", "students", institutionId ?? ""],
-    queryFn: async (): Promise<StudentProfile[]> => {
-      if (!institutionId) return [];
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, email, full_name")
-        .eq("institution_id", institutionId)
-        .eq("role", "student")
-        .is("deleted_at", null)
-        .order("full_name");
-      if (error) throw error;
-      return (data ?? []) as StudentProfile[];
-    },
+    queryFn: async (): Promise<StudentProfile[]> => qPeople("student"),
     enabled: !!institutionId,
   });
 }
 
 function usePayments(institutionId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["payments", "list", institutionId ?? ""],
-    queryFn: async (): Promise<PaymentRow[]> => {
-      if (!institutionId) return [];
-      const { data, error } = await supabase
-        .from("cash_payments")
-        .select("id, student_id, amount, paid_at")
-        .eq("institution_id", institutionId)
-        .order("paid_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as PaymentRow[];
-    },
+    queryFn: async (): Promise<PaymentRow[]> => qCashPayments(),
     enabled: !!institutionId,
   });
 }

@@ -1,4 +1,4 @@
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getDb } from "@/lib/server/db";
 import { AdminFeedbackContent } from "./admin-feedback-content";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +19,7 @@ type FeedbackRow = {
 };
 
 export default async function AdminFeedbackPage() {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
 
   const { data: feedbackRows } = await admin
     .from("user_feedback")

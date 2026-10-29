@@ -1,9 +1,9 @@
 "use server";
 
 import { scryptSync, timingSafeEqual } from "node:crypto";
-import { createClient } from "@/utils/supabase/server";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
-import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { getDb } from "@/lib/server/db";
+import { getActor } from "@/lib/auth/identity";
+import { notifyUser } from "@/lib/notify-dispatch";
 
 type MultipleChoiceQuestion = {
   type?: "multiple_choice";
@@ -25,28 +25,6 @@ type QuizRow = {
   security_mode: QuizSecurityMode;
   max_focus_violations: number;
 };
-
-export async function createQuizResultNotification(input: {
-  quizTitle: string;
-  score: number;
-}) {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { success: false as const, error: "Not authenticated." };
-
-  const admin = createServiceRoleClient();
-  const { error } = await admin.from("notifications").insert({
-    user_id: user.id,
-    title: "Quiz result",
-    message: `You scored ${input.score.toFixed(0)}% in ${input.quizTitle}.`,
-    type: "quiz_result",
-    is_read: false,
-  });
-  if (error) return { success: false as const, error: error.message };
-  return { success: true as const };
-}
 
 function verifyPassword(password: string, storedHash: string): boolean {
   const [salt, storedDigest] = storedHash.split(":");
@@ -74,15 +52,12 @@ function normalizeMultipleChoiceQuestions(raw: unknown): MultipleChoiceQuestion[
 }
 
 export async function startQuizAttempt(input: { quizId: string; password: string }) {
-  const identity = await getUserIdentity();
-  if (!identity?.user || !identity.institution_id) {
-    return { success: false as const, error: "Not authenticated." };
-  }
-  if (identity.role !== "student") {
+  const identity = await getActor(["student"]);
+  if (!identity?.institution_id) {
     return { success: false as const, error: "Only students can start quiz attempts." };
   }
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const { data: quiz, error: quizError } = await admin
     .from("quizzes")
     .select(
@@ -101,7 +76,7 @@ export async function startQuizAttempt(input: { quizId: string; password: string
   if (quizRow.cohort_id && quizRow.cohort_id !== studentCohortId) {
     return { success: false as const, error: "This quiz is not for your cohort." };
   }
-  if (!verifyPassword(input.password, quizRow.access_password_hash)) {
+  if (quizRow.access_password_hash && !verifyPassword(input.password ?? "", quizRow.access_password_hash)) {
     return { success: false as const, error: "Incorrect quiz password." };
   }
 
@@ -135,6 +110,8 @@ export async function startQuizAttempt(input: { quizId: string; password: string
     success: true as const,
     attemptId: attempt.id as string,
     startedAt: attempt.started_at as string,
+    // Questions go to the browser without the answer key.
+    questions: questionSnapshot.map((q) => ({ question: q.question, options: q.options })),
     securityMode: quizRow.security_mode,
     maxFocusViolations: quizRow.max_focus_violations,
     timeLimitMinutes: quizRow.time_limit_minutes,
@@ -147,12 +124,12 @@ export async function submitQuizAttempt(input: {
   focusViolations: number;
   submittedReason: "manual" | "timer_expired" | "security_violation";
 }) {
-  const identity = await getUserIdentity();
-  if (!identity?.user) {
+  const identity = await getActor(["student"]);
+  if (!identity) {
     return { success: false as const, error: "Not authenticated." };
   }
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const { data: attempt, error: attemptError } = await admin
     .from("quiz_attempts")
     .select("id, quiz_id, student_id, started_at, status, question_snapshot")
@@ -190,7 +167,17 @@ export async function submitQuizAttempt(input: {
   const timeSpentSeconds = Number.isFinite(startedAt)
     ? Math.max(0, Math.round((now - startedAt) / 1000))
     : 0;
-  const status = input.submittedReason === "manual" ? "submitted" : "auto_submitted";
+  // The timer is enforced here too: a late manual submit is recorded as timer_expired.
+  const { data: quizMeta } = await admin
+    .from("quizzes")
+    .select("title, time_limit_minutes")
+    .eq("id", attempt.quiz_id as string)
+    .maybeSingle();
+  const limitSeconds = Number(quizMeta?.time_limit_minutes ?? 0) * 60;
+  const GRACE_SECONDS = 60;
+  const lateSubmit = limitSeconds > 0 && timeSpentSeconds > limitSeconds + GRACE_SECONDS;
+  const submittedReason = lateSubmit && input.submittedReason === "manual" ? "timer_expired" : input.submittedReason;
+  const status = submittedReason === "manual" ? "submitted" : "auto_submitted";
 
   const { error: updateError } = await admin
     .from("quiz_attempts")
@@ -198,9 +185,9 @@ export async function submitQuizAttempt(input: {
       answers: normalizedAnswers,
       score,
       ended_at: new Date(now).toISOString(),
-      focus_violations: Math.max(0, input.focusViolations || 0),
+      focus_violations: Math.min(1000, Math.max(0, Math.floor(input.focusViolations || 0))),
       time_spent_seconds: timeSpentSeconds,
-      submitted_reason: input.submittedReason,
+      submitted_reason: submittedReason,
       status,
       submitted_at: new Date(now).toISOString(),
     })
@@ -209,6 +196,18 @@ export async function submitQuizAttempt(input: {
 
   if (updateError) {
     return { success: false as const, error: updateError.message };
+  }
+
+  try {
+    await notifyUser(
+      identity.user.id,
+      null,
+      "Quiz result",
+      `You scored ${score.toFixed(0)}% in ${quizMeta?.title ?? "your quiz"}.`,
+      "quiz_result"
+    );
+  } catch (e) {
+    console.error("[submitQuizAttempt] notify", e);
   }
 
   return {

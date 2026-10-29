@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getDb } from "@/lib/server/db";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
@@ -21,7 +21,7 @@ export default async function AdminInstitutionDetailPage({
   params: Promise<{ id: string }>;
 }) {
   const { id } = await params;
-  const admin = createServiceRoleClient();
+  const admin = getDb();
 
   const { data: inst } = await admin
     .from("institutions")

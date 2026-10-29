@@ -5,8 +5,8 @@ import {
   BILLING_TIERS,
   getEffectiveTier,
 } from "@/lib/billing";
-import { getUserIdentity } from "@/utils/supabase/get-user-identity";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getUserIdentity } from "@/lib/auth/identity";
+import { getDb } from "@/lib/server/db";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +19,7 @@ export default async function PricingGuidePage() {
   let isTrial = false;
 
   if (identity.institution_id) {
-    const admin = createServiceRoleClient();
+    const admin = getDb();
     const { data: institution } = await admin
       .from("institutions")
       .select("subscription_tier, is_trial")

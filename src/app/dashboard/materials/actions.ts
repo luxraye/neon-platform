@@ -1,11 +1,11 @@
 "use server";
 
 import { randomUUID } from "crypto";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
-import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { getDb } from "@/lib/server/db";
+import { getActor } from "@/lib/auth/identity";
+import { uploadFile } from "@/lib/server/storage";
+import { cohortBelongsTo, safeHttpUrl } from "@/lib/server/guards";
 import { broadcastNewMaterialToStudents } from "@/lib/notify-dispatch";
-
-const MATERIALS_BUCKET = "material-documents";
 
 const ALLOWED_EXT = new Set(["pdf", "docx", "pptx", "jpg", "jpeg", "png"]);
 
@@ -38,12 +38,8 @@ export async function createMaterial(formData: {
   subject?: string;
   cohort_id?: string;
 }): Promise<CreateMaterialResult> {
-  const identity = await getUserIdentity();
-  if (!identity?.user) {
-    return { success: false, error: "Not authenticated." };
-  }
-
-  if (!identity.institution_id || (identity.role !== "headmaster" && identity.role !== "tutor")) {
+  const identity = await getActor(["headmaster", "tutor"]);
+  if (!identity?.institution_id) {
     return { success: false, error: "Only tutors and headmasters can add materials." };
   }
 
@@ -52,13 +48,20 @@ export async function createMaterial(formData: {
     return { success: false, error: "Title is required." };
   }
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const cohortId = formData.cohort_id?.trim() || null;
+  if (!(await cohortBelongsTo(cohortId, identity.institution_id))) {
+    return { success: false, error: "That cohort is not in your centre." };
+  }
+  const contentUrl = safeHttpUrl(formData.content_url);
+  if (formData.content_url?.trim() && !contentUrl) {
+    return { success: false, error: "Links must start with http:// or https://." };
+  }
   const { error } = await admin.from("materials").insert({
     institution_id: identity.institution_id,
     cohort_id: cohortId,
     title,
-    content_url: formData.content_url?.trim() || null,
+    content_url: contentUrl,
     description: formData.description?.trim() || null,
     subject: formData.subject?.trim() || null,
   });
@@ -78,14 +81,10 @@ export async function createMaterial(formData: {
 
 const MAX_FILE_BYTES = 50 * 1024 * 1024;
 
-/** Upload a file to the `material-documents` bucket and create a materials row (create bucket in Supabase Storage if missing). */
+/** Upload a file to Cloud Storage and create a materials row. */
 export async function uploadMaterialDocument(formData: FormData): Promise<CreateMaterialResult> {
-  const identity = await getUserIdentity();
-  if (!identity?.user) {
-    return { success: false, error: "Not authenticated." };
-  }
-
-  if (!identity.institution_id || (identity.role !== "headmaster" && identity.role !== "tutor")) {
+  const identity = await getActor(["headmaster", "tutor"]);
+  if (!identity?.institution_id) {
     return { success: false, error: "Only tutors and headmasters can add materials." };
   }
 
@@ -115,23 +114,19 @@ export async function uploadMaterialDocument(formData: FormData): Promise<Create
   const description = (formData.get("description") as string | null)?.trim() || null;
   const cohortRaw = (formData.get("cohort_id") as string | null)?.trim();
   const cohort_id = cohortRaw && cohortRaw !== "none" ? cohortRaw : null;
+  if (!(await cohortBelongsTo(cohort_id, identity.institution_id))) {
+    return { success: false, error: "That cohort is not in your centre." };
+  }
 
-  const admin = createServiceRoleClient();
-  const path = `${identity.institution_id}/${randomUUID()}.${ext}`;
+  const admin = getDb();
+  const path = `material-documents/${identity.institution_id}/${randomUUID()}.${ext}`;
   const buf = Buffer.from(await file.arrayBuffer());
   const contentType = file.type && file.type !== "application/octet-stream" ? file.type : mimeForExt(ext);
 
-  const { error: uploadError } = await admin.storage.from(MATERIALS_BUCKET).upload(path, buf, {
-    contentType,
-    upsert: false,
-  });
-
-  if (uploadError) {
-    return { success: false, error: uploadError.message };
+  const { url: content_url, error: uploadError } = await uploadFile(path, buf, contentType);
+  if (uploadError || !content_url) {
+    return { success: false, error: uploadError?.message ?? "Upload failed." };
   }
-
-  const { data: urlData } = admin.storage.from(MATERIALS_BUCKET).getPublicUrl(path);
-  const content_url = urlData.publicUrl;
 
   const { error } = await admin.from("materials").insert({
     institution_id: identity.institution_id,
@@ -160,16 +155,12 @@ export type DeleteMaterialResult =
   | { success: false; error: string };
 
 export async function deleteMaterial(materialId: string): Promise<DeleteMaterialResult> {
-  const identity = await getUserIdentity();
-  if (!identity?.user) {
-    return { success: false, error: "Not authenticated." };
-  }
-
-  if (!identity.institution_id || (identity.role !== "headmaster" && identity.role !== "tutor")) {
+  const identity = await getActor(["headmaster", "tutor"]);
+  if (!identity?.institution_id) {
     return { success: false, error: "Only tutors and headmasters can remove materials." };
   }
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const { data: row, error: fetchErr } = await admin
     .from("materials")
     .select("id, institution_id")

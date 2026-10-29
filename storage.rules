@@ -1,0 +1,11 @@
+rules_version = '2';
+
+// Uploads go through the server only. Files are shared through download-token URLs that the
+// server hands out, so no direct browser access is needed here.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}

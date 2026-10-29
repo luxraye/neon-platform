@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useProfile } from "@/hooks/use-profile";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qPeople, qStudentReport } from "@/app/data/queries";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -25,95 +25,22 @@ const RANGES: { value: string; label: string; days: number }[] = [
 ];
 
 function useInstitutionStudents(institutionId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["reports-students", institutionId ?? ""],
-    queryFn: async (): Promise<StudentOption[]> => {
-      if (!institutionId) return [];
-      const { data, error } = await supabase
-        .from("profiles")
-        .select("id, full_name, email, cohort_id")
-        .eq("institution_id", institutionId)
-        .eq("role", "student")
-        .order("full_name");
-      if (error) throw error;
-      return (data ?? []).map((p: { id: string; full_name: string | null; email: string }) => ({
-        id: p.id,
-        label: p.full_name || p.email,
-      }));
-    },
+    queryFn: async (): Promise<StudentOption[]> =>
+      (await qPeople("student")).map((p) => ({ id: p.id, label: p.full_name || p.email })),
     enabled: !!institutionId,
   });
 }
 
-function useReportData(
-  studentId: string | null,
-  startDate: string,
-  endDate: string
-) {
-  const supabase = createBrowserSupabaseClient();
+function useReportData(studentId: string | null, startDate: string, endDate: string) {
   return useQuery({
     queryKey: ["report-data", studentId ?? "", startDate, endDate],
     queryFn: async () => {
       if (!studentId) return null;
-      const [attendance, attempts, profile] = await Promise.all([
-        supabase
-          .from("attendance")
-          .select("id, status, date")
-          .eq("student_id", studentId)
-          .gte("date", startDate)
-          .lte("date", endDate),
-        supabase
-          .from("quiz_attempts")
-          .select("id, quiz_id, score, submitted_at")
-          .eq("student_id", studentId)
-          .gte("submitted_at", startDate)
-          .lte("submitted_at", endDate + "T23:59:59"),
-        supabase.from("profiles").select("cohort_id").eq("id", studentId).single(),
-      ]);
-      if (attendance.error) throw attendance.error;
-      if (attempts.error) throw attempts.error;
-      const cohortId = profile.data?.cohort_id;
-      let materials: MaterialRow[] = [];
-      let attemptsWithTitle: AttemptRow[] = [];
-      if (attempts.data?.length) {
-        const quizIds = [...new Set(attempts.data.map((a: { quiz_id: string }) => a.quiz_id))];
-        const { data: quizzes } = await supabase
-          .from("quizzes")
-          .select("id, title")
-          .in("id", quizIds);
-        const titleById: Record<string, string> = {};
-        (quizzes ?? []).forEach((q: { id: string; title: string }) => {
-          titleById[q.id] = q.title;
-        });
-        attemptsWithTitle = (attempts.data ?? []).map((a: { quiz_id: string; score: number; submitted_at: string }) => ({
-          quiz_title: titleById[a.quiz_id] ?? "Quiz",
-          score: a.score,
-          submitted_at: a.submitted_at,
-        }));
-      }
-      if (cohortId) {
-        const { data: mat } = await supabase
-          .from("materials")
-          .select("title, subject")
-          .eq("cohort_id", cohortId);
-        materials = (mat ?? []) as MaterialRow[];
-      }
-      const totalDays = (attendance.data ?? []).length;
-      const present = (attendance.data ?? []).filter((r: { status: string }) => r.status === "present").length;
-      const attendancePct = totalDays ? (present / totalDays) * 100 : 0;
-      const quizAvg =
-        attemptsWithTitle.length
-          ? attemptsWithTitle.reduce((s, a) => s + a.score, 0) / attemptsWithTitle.length
-          : 0;
-      return {
-        attendancePct,
-        totalDays,
-        present,
-        quizAvg,
-        attempts: attemptsWithTitle,
-        materials,
-      };
+      const r = await qStudentReport(studentId, startDate, endDate);
+      if (!r) return null;
+      return { ...r, present: r.presentDays };
     },
     enabled: !!studentId && !!startDate && !!endDate,
   });

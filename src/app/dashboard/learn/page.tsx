@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 import { useProfile } from "@/hooks/use-profile";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qMaterials, qQuizzes, type QuizSummaryDto } from "@/app/data/queries";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -27,46 +27,22 @@ type Material = {
   subject: string | null;
 };
 
-type Quiz = {
-  id: string;
-  title: string;
-  time_limit_minutes: number;
-  questions: unknown;
-  max_focus_violations: number;
-};
+type Quiz = QuizSummaryDto;
+
+type QuizQuestionForTaker = { question: string; options: string[] };
 
 function useCohortMaterials(cohortId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["learn", "materials", cohortId ?? ""],
-    queryFn: async (): Promise<Material[]> => {
-      if (!cohortId) return [];
-      const { data, error } = await supabase
-        .from("materials")
-        .select("id, title, content_url, description, subject")
-        .eq("cohort_id", cohortId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as Material[];
-    },
+    queryFn: async (): Promise<Material[]> => qMaterials(),
     enabled: !!cohortId,
   });
 }
 
 function useCohortQuizzes(cohortId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["learn", "quizzes", cohortId ?? ""],
-    queryFn: async (): Promise<Quiz[]> => {
-      if (!cohortId) return [];
-      const { data, error } = await supabase
-        .from("quizzes")
-        .select("id, title, time_limit_minutes, questions, max_focus_violations")
-        .eq("cohort_id", cohortId)
-        .order("created_at", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as Quiz[];
-    },
+    queryFn: async (): Promise<Quiz[]> => qQuizzes(),
     enabled: !!cohortId,
   });
 }
@@ -78,6 +54,7 @@ export default function LearnPage() {
   const { data: quizzes, isLoading: quizzesLoading } = useCohortQuizzes(cohortId);
   const [takingQuizId, setTakingQuizId] = useState<string | null>(null);
   const [attemptId, setAttemptId] = useState<string | null>(null);
+  const [attemptQuestions, setAttemptQuestions] = useState<QuizQuestionForTaker[]>([]);
   const [password, setPassword] = useState("");
   const [startingQuizId, setStartingQuizId] = useState<string | null>(null);
 
@@ -132,6 +109,7 @@ export default function LearnPage() {
       return;
     }
     await requestFullscreen();
+    setAttemptQuestions(result.questions);
     setAttemptId(result.attemptId);
     setPassword("");
   };
@@ -188,7 +166,8 @@ export default function LearnPage() {
                   <CardHeader className="pb-2 px-4 sm:px-6">
                     <CardTitle className="text-base">{q.title}</CardTitle>
                     <CardDescription>
-                      {q.time_limit_minutes} min · Medium security
+                      {q.question_count} questions · {q.time_limit_minutes} min
+                      {q.due_at ? ` · due ${q.due_at}` : ""}
                     </CardDescription>
                   </CardHeader>
                   <CardContent className="px-4 sm:px-6">
@@ -238,7 +217,8 @@ export default function LearnPage() {
             </>
           ) : (
             <QuizTaker
-              quiz={quiz}
+              quiz={{ id: quiz.id, title: quiz.title, time_limit_minutes: quiz.time_limit_minutes }}
+              questions={attemptQuestions}
               attemptId={attemptId}
               maxFocusViolations={quiz.max_focus_violations}
               onClose={() => {

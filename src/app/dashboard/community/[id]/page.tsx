@@ -5,7 +5,7 @@ import { useParams, usePathname } from "next/navigation";
 import Link from "next/link";
 import { useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { qForumComments, qForumPost, qPeopleNames } from "@/app/data/queries";
 import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -37,57 +37,25 @@ type Post = {
 };
 
 function usePost(postId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["forum-post", postId ?? ""],
-    queryFn: async (): Promise<Post | null> => {
-      if (!postId) return null;
-      const { data, error } = await supabase
-        .from("forum_posts")
-        .select("id, title, subject, content, author_id, created_at")
-        .eq("id", postId)
-        .maybeSingle();
-      if (error) throw error;
-      return data as Post | null;
-    },
+    queryFn: async (): Promise<Post | null> => (postId ? qForumPost(postId) : null),
     enabled: !!postId,
   });
 }
 
 function useComments(postId: string | null) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
     queryKey: ["forum-comments", postId ?? ""],
-    queryFn: async (): Promise<Comment[]> => {
-      if (!postId) return [];
-      const { data, error } = await supabase
-        .from("forum_comments")
-        .select("id, post_id, author_id, content, created_at")
-        .eq("post_id", postId)
-        .order("created_at", { ascending: true });
-      if (error) throw error;
-      return (data ?? []) as Comment[];
-    },
+    queryFn: async (): Promise<Comment[]> => (postId ? qForumComments(postId) : []),
     enabled: !!postId,
   });
 }
 
 function useAuthors(ids: string[]) {
-  const supabase = createBrowserSupabaseClient();
   return useQuery({
-    queryKey: ["forum-authors", ids.sort().join(",")],
-    queryFn: async (): Promise<Record<string, string>> => {
-      if (ids.length === 0) return {};
-      const { data } = await supabase
-        .from("profiles")
-        .select("id, full_name, email")
-        .in("id", [...new Set(ids)]);
-      const map: Record<string, string> = {};
-      (data ?? []).forEach((p: { id: string; full_name: string | null; email: string }) => {
-        map[p.id] = p.full_name || p.email;
-      });
-      return map;
-    },
+    queryKey: ["forum-authors", [...ids].sort().join(",")],
+    queryFn: () => qPeopleNames(ids),
     enabled: ids.length > 0,
   });
 }

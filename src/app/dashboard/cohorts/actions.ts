@@ -1,7 +1,7 @@
 "use server";
 
-import { createServiceRoleClient } from "@/utils/supabase/admin";
-import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { getDb } from "@/lib/server/db";
+import { getActor } from "@/lib/auth/identity";
 
 export type CreateCohortResult =
   | { success: true }
@@ -11,12 +11,12 @@ export async function createCohort(formData: {
   name: string;
   description?: string;
 }): Promise<CreateCohortResult> {
-  const identity = await getUserIdentity();
-  if (!identity?.user) {
+  const identity = await getActor();
+  if (!identity) {
     return { success: false, error: "Not authenticated." };
   }
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   if (
     (identity.role !== "headmaster" && identity.role !== "tutor") ||
     !identity.institution_id
@@ -24,7 +24,7 @@ export async function createCohort(formData: {
     return { success: false, error: "Only tutors and headmasters can create cohorts." };
   }
 
-  const name = formData.name?.trim();
+  const name = formData.name?.trim().slice(0, 80);
   if (!name) {
     return { success: false, error: "Name is required." };
   }
@@ -52,10 +52,10 @@ export type CohortRow = {
 
 /** Returns cohorts for the current user's institution when headmaster so RLS doesn't hide them. */
 export async function getCohorts(): Promise<CohortRow[]> {
-  const identity = await getUserIdentity();
-  if (!identity?.user) return [];
+  const identity = await getActor();
+  if (!identity) return [];
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   if (identity.role !== "headmaster" && identity.role !== "tutor") {
     return [];
   }
@@ -63,7 +63,7 @@ export async function getCohorts(): Promise<CohortRow[]> {
   const { data } = await admin
     .from("cohorts")
     .select("id, institution_id, name, description, created_at")
-    .eq("institution_id", identity.institution_id)
+    .eq("institution_id", identity.institution_id ?? "")
     .order("created_at", { ascending: false });
 
   return (data ?? []) as CohortRow[];
@@ -77,12 +77,12 @@ export async function updateCohort(
   cohortId: string,
   formData: { name: string; description?: string }
 ): Promise<UpdateCohortResult> {
-  const identity = await getUserIdentity();
-  if (!identity?.user) {
+  const identity = await getActor();
+  if (!identity) {
     return { success: false, error: "Not authenticated." };
   }
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   if (
     (identity.role !== "headmaster" && identity.role !== "tutor") ||
     !identity.institution_id
@@ -90,7 +90,7 @@ export async function updateCohort(
     return { success: false, error: "Only tutors and headmasters can edit cohorts." };
   }
 
-  const name = formData.name?.trim();
+  const name = formData.name?.trim().slice(0, 80);
   if (!name) {
     return { success: false, error: "Name is required." };
   }
@@ -128,12 +128,12 @@ export type DeleteCohortResult =
   | { success: false; error: string };
 
 export async function deleteCohort(cohortId: string): Promise<DeleteCohortResult> {
-  const identity = await getUserIdentity();
-  if (!identity?.user) {
+  const identity = await getActor();
+  if (!identity) {
     return { success: false, error: "Not authenticated." };
   }
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   if (
     (identity.role !== "headmaster" && identity.role !== "tutor") ||
     !identity.institution_id
@@ -153,6 +153,14 @@ export async function deleteCohort(cohortId: string): Promise<DeleteCohortResult
   if (row.institution_id !== identity.institution_id) {
     return { success: false, error: "You cannot delete this cohort." };
   }
+
+  // Mirror the old database rules: unassign students, unlink content, drop the cohort's
+  // timetable and attendance.
+  await admin.from("profiles").update({ cohort_id: null }).eq("cohort_id", cohortId).eq("institution_id", identity.institution_id);
+  await admin.from("materials").update({ cohort_id: null }).eq("cohort_id", cohortId).eq("institution_id", identity.institution_id);
+  await admin.from("quizzes").update({ cohort_id: null }).eq("cohort_id", cohortId).eq("institution_id", identity.institution_id);
+  await admin.from("timetables").delete().eq("cohort_id", cohortId).eq("institution_id", identity.institution_id);
+  await admin.from("attendance").delete().eq("cohort_id", cohortId).eq("institution_id", identity.institution_id);
 
   const { error } = await admin.from("cohorts").delete().eq("id", cohortId);
 
