@@ -1,54 +1,57 @@
-# Neon Platform
+# Neon
 
-Neon is a multi-tenant student management platform for tuition centres, built with Next.js and Supabase.
+Neon runs a tuition centre from one place: students join with a link, tutors share notes and set timed quizzes, attendance is a few taps, fees are tracked, and parents get a printable report. It's built for centres in Botswana and works on cheap phones and patchy data.
 
-## Local Development
+**Stack:** Next.js 16 (App Router, React 19), Firebase (Auth, Firestore, Cloud Storage), Tailwind CSS 4, TanStack Query, Dexie for offline, Resend for email.
 
-1. Install dependencies:
+## Who sees what
+
+| Role | Main screens |
+| --- | --- |
+| Platform admin | Centres, plans and trials, leads from the website, billing, in-app feedback |
+| Headmaster | Overview, People (approve join requests, add staff and students), Cohorts, Timetable, Fees, Results, Reports, Plan, Settings and branding |
+| Tutor | Today, Attendance, Materials, Quizzes, Results, Reports, Timetable, Community |
+| Student | Home, Learn (quizzes and materials), Timetable, Results, Community, Install app |
+
+## Run it locally
+
 ```bash
 npm install
-```
-
-2. Copy and configure environment variables:
-```bash
-cp .env.example .env.local
-```
-
-3. Run development server:
-```bash
+cp .env.example .env.local     # fill in the Firebase values (see docs/FIREBASE.md)
+npm run create-admin -- --email you@example.com
+npm run seed-demo              # optional: a full demo centre to click around
 npm run dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000).
+Open http://localhost:3000 and sign in.
 
-## Environment Variables
+## Checks
 
-Required:
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `NEXT_PUBLIC_SUPABASE_ANON_KEY`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `NEXT_PUBLIC_APP_URL` (recommended, especially for hosted deployments)
+```bash
+npm run lint
+npm run typecheck
+npm test
+npm run build
+```
 
-Optional scaffold (for future DPOPay activation):
-- `DPOPAY_COMPANY_TOKEN`
-- `DPOPAY_SERVICE_TYPE`
-- `DPOPAY_WEBHOOK_SECRET`
+CI runs all four on every pull request.
 
-## Deployment on Vercel
+## Project layout
 
-This repository includes `vercel.json` with Next.js defaults.
+```
+src/app/(auth)/login            sign-in and password reset
+src/app/join/[subdomain]        public "ask to join" page for each centre
+src/app/(platform)/admin        platform admin area
+src/app/(institution)/<role>    headmaster, tutor and student routes (thin wrappers)
+src/app/_screens                the shared screens and their server actions
+src/app/data/queries.ts         read-only server loaders used by the screens
+src/lib/server/db.ts            small Firestore query layer (server only)
+src/lib/auth                    session cookie, identity and role checks
+src/components/shell            sidebar, top bar, phone bottom bar
+src/components/ui               buttons, inputs, dialogs, page building blocks
+scripts/                        create-admin and seed-demo
+```
 
-### Steps
-1. Import the repository into Vercel.
-2. Set the Root Directory to `neon-platform` (if repo root is one level above app).
-3. Add all required environment variables in Vercel Project Settings.
-4. Deploy.
+## Deploying
 
-### Build and Start Commands
-- Build: `npm run build`
-- Install: `npm install`
-- Dev: `npm run dev`
-
-## Architecture Notes
-
-- Product/feature architecture and implementation status are documented in `DNA.md`.
+Firebase App Hosting is the default target (`apphosting.yaml`). Vercel also works (`vercel.json`). Both are covered in [docs/FIREBASE.md](docs/FIREBASE.md).

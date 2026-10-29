@@ -7,11 +7,10 @@
     "build": "next build",
     "start": "next start",
     "lint": "eslint",
-    "seed:admin": "node scripts/seed-admin.cjs",
-    "set-first-admin": "node scripts/set-first-admin.cjs",
-    "repair-headmaster": "node scripts/repair-headmaster-link.cjs",
     "test": "vitest run",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "create-admin": "tsx scripts/create-admin.ts",
+    "seed-demo": "tsx scripts/seed-demo.ts"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
@@ -44,6 +43,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
+    "tsx": "^4.23.15",
     "typescript": "^5",
     "vitest": "^3.2.7"
   }
