@@ -1,15 +1,23 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useRef, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { qMaterials } from "@/app/data/queries";
-import { useProfile } from "@/hooks/use-profile";
-import { useCohorts } from "@/hooks/use-cohorts";
-import { useForumPosts } from "@/hooks/use-forum-posts";
-import { createMaterial, deleteMaterial, uploadMaterialDocument } from "./../materials/actions";
+import {
+  BookOpen,
+  ExternalLink,
+  FileImage,
+  FileText,
+  Link2,
+  Presentation,
+  Search,
+  Trash2,
+  Upload,
+} from "lucide-react";
+import { qMaterials, type MaterialDto } from "@/app/data/queries";
 import { useStaffRole } from "@/hooks/use-staff-role";
-import { createPost } from "./../community/actions";
+import { useCohorts } from "@/hooks/use-cohorts";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,535 +28,317 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-// No Shadcn Tabs component is available in this repo; use a simple toggle UI instead.
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge, EmptyState, PageHeader } from "@/components/ui/page";
+import { createMaterial, deleteMaterial, uploadMaterialDocument } from "../materials/actions";
 
-type MaterialRow = {
-  id: string;
-  title: string;
-  content_url: string | null;
-  description: string | null;
-  subject: string | null;
-  cohort_id: string | null;
-  created_at: string;
-};
+const MAX_MB = 25;
+const OTHER = "Other";
 
-function normalizeSubject(s: string | null | undefined): string | null {
-  if (!s) return null;
-  const t = s.trim();
-  return t.length ? t : null;
+function kindOf(url: string | null) {
+  const path = (url ?? "").split("?")[0].toLowerCase();
+  const ext = decodeURIComponent(path).split(".").pop() ?? "";
+  if (ext === "pdf") return { label: "PDF", icon: FileText, tone: "text-destructive bg-destructive/10" };
+  if (ext === "docx") return { label: "Word", icon: FileText, tone: "text-primary bg-secondary" };
+  if (ext === "pptx") return { label: "Slides", icon: Presentation, tone: "text-warning bg-warning/10" };
+  if (["png", "jpg", "jpeg"].includes(ext)) return { label: "Image", icon: FileImage, tone: "text-success bg-success/10" };
+  return { label: "Link", icon: Link2, tone: "text-muted-foreground bg-muted" };
 }
 
-export default function SubjectsPage() {
+type Draft = { title: string; subject: string; description: string; cohort: string; url: string; file: File | null };
+const EMPTY: Draft = { title: "", subject: "", description: "", cohort: "none", url: "", file: null };
+
+export default function MaterialsLibraryPage() {
   const queryClient = useQueryClient();
-  const { data: profileData } = useProfile();
-  const { isStaff: canManage } = useStaffRole();
-
+  const { isStaff, profileData } = useStaffRole();
   const institutionId = profileData?.profile?.institution_id ?? null;
-
   const { data: cohorts } = useCohorts(institutionId);
+  const { data, isLoading } = useQuery({
+    queryKey: ["materials", institutionId ?? ""],
+    queryFn: () => qMaterials(),
+    enabled: !!institutionId,
+  });
 
-  const [activeSubject, setActiveSubject] = useState<string>("none");
-  const [tab, setTab] = useState<"documents" | "announcements">("documents");
-  const [subjects, setSubjects] = useState<string[]>([]);
+  const materials = useMemo(() => data ?? [], [data]);
+  const subjects = useMemo(() => {
+    const counts = new Map<string, number>();
+    for (const m of materials) {
+      const s = m.subject?.trim() || OTHER;
+      counts.set(s, (counts.get(s) ?? 0) + 1);
+    }
+    return [...counts.entries()].sort((a, b) => a[0].localeCompare(b[0]));
+  }, [materials]);
 
-  const [materialDialogOpen, setMaterialDialogOpen] = useState(false);
-  const [matTitle, setMatTitle] = useState("");
-  const [matContentUrl, setMatContentUrl] = useState("");
-  const [matFile, setMatFile] = useState<File | null>(null);
-  const [matDescription, setMatDescription] = useState("");
-  const [matCohortId, setMatCohortId] = useState("");
-  const [matSubmitting, setMatSubmitting] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-
-  const [announcementDialogOpen, setAnnouncementDialogOpen] = useState(false);
-  const [annTitle, setAnnTitle] = useState("");
-  const [annContent, setAnnContent] = useState("");
-  const [annSubmitting, setAnnSubmitting] = useState(false);
-
-  const {
-    data: announcements,
-    isLoading: announcementsLoading,
-    isError: announcementsError,
-    error: announcementsErr,
-  } = useForumPosts(
-    institutionId,
-    activeSubject && activeSubject !== "none" ? activeSubject : null
+  const [active, setActive] = useState("all");
+  const [search, setSearch] = useState("");
+  const q = search.trim().toLowerCase();
+  const visible = materials.filter(
+    (m) =>
+      (active === "all" || (m.subject?.trim() || OTHER) === active) &&
+      (!q || m.title.toLowerCase().includes(q) || (m.description ?? "").toLowerCase().includes(q))
   );
+  const cohortName = (id: string | null) => (id ? cohorts?.find((c) => c.id === id)?.name ?? "Cohort" : "All cohorts");
 
-  const refreshSubjects = async () => {
-    if (!institutionId) {
-      setSubjects([]);
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [saving, setSaving] = useState(false);
+  const [dragOver, setDragOver] = useState(false);
+  const fileRef = useRef<HTMLInputElement>(null);
+
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["materials"] });
+
+  function pickFile(f: File | null) {
+    if (!draft) return;
+    if (f && f.size > MAX_MB * 1024 * 1024) {
+      toast.error(`That file is over ${MAX_MB} MB. Share a link to it instead.`);
       return;
     }
-    const data = await qMaterials();
+    setDraft({ ...draft, file: f, url: f ? "" : draft.url, title: draft.title || (f ? f.name.replace(/\.[^.]+$/, "") : "") });
+  }
 
-    const distinct = Array.from(
-      new Set(
-        (data ?? [])
-          .map((r) => normalizeSubject((r as { subject?: string | null }).subject))
-          .filter((x): x is string => !!x)
-      )
-    );
-    setSubjects(distinct);
-
-    if ((activeSubject === "none" || !activeSubject) && distinct.length) setActiveSubject(distinct[0]);
-  };
-
-  useEffect(() => {
-    // Prime subjects list.
-    refreshSubjects().catch(() => {
-      toast.error("Failed to load subjects.");
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- only rerun when institution changes
-  }, [institutionId]);
-
-  const activeSubjectResolved = activeSubject === "none" ? "" : activeSubject.trim();
-
-  const [documents, setDocuments] = useState<MaterialRow[] | null>(null);
-  const [docsLoading, setDocsLoading] = useState(false);
-  const [docsError, setDocsError] = useState<string | null>(null);
-
-  const loadDocuments = async () => {
-    if (!institutionId || !activeSubjectResolved) return;
-    setDocsLoading(true);
-    setDocsError(null);
-    let data: MaterialRow[] = [];
-    try {
-      data = await qMaterials({ subject: activeSubjectResolved });
-    } catch (e) {
-      setDocsError(e instanceof Error ? e.message : "Could not load documents.");
-      setDocuments([]);
-      setDocsLoading(false);
-      return;
-    }
-    setDocuments(data);
-    setDocsLoading(false);
-  };
-
-  useEffect(() => {
-    if (!activeSubjectResolved) return;
-    loadDocuments().catch(() => {
-      toast.error("Failed to load documents.");
-    });
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- re-run on subject/institution change only
-  }, [institutionId, activeSubjectResolved]);
-
-  const handleCreateMaterial = async (e: React.FormEvent) => {
+  async function save(e: React.FormEvent) {
     e.preventDefault();
-    if (!activeSubjectResolved) {
-      toast.error("Select a subject first.");
+    if (!draft) return;
+    if (!draft.file && !draft.url.trim()) {
+      toast.error("Add a file or paste a link.");
       return;
     }
-    if (!matTitle.trim()) {
-      toast.error("Title is required.");
-      return;
-    }
-    if (!matFile && !matContentUrl.trim()) {
-      toast.error("Upload a file or paste a link.");
-      return;
-    }
-    setMatSubmitting(true);
-    let result;
-    if (matFile) {
+    setSaving(true);
+    let res;
+    if (draft.file) {
       const fd = new FormData();
-      fd.append("file", matFile);
-      fd.append("title", matTitle.trim());
-      fd.append("subject", activeSubjectResolved);
-      if (matDescription.trim()) fd.append("description", matDescription.trim());
-      if (matCohortId && matCohortId !== "none") fd.append("cohort_id", matCohortId);
-      result = await uploadMaterialDocument(fd);
+      fd.append("file", draft.file);
+      fd.append("title", draft.title.trim());
+      if (draft.subject.trim()) fd.append("subject", draft.subject.trim());
+      if (draft.description.trim()) fd.append("description", draft.description.trim());
+      if (draft.cohort !== "none") fd.append("cohort_id", draft.cohort);
+      res = await uploadMaterialDocument(fd);
     } else {
-      result = await createMaterial({
-        title: matTitle,
-        content_url: matContentUrl || undefined,
-        description: matDescription || undefined,
-        subject: activeSubjectResolved,
-        cohort_id: matCohortId === "none" || !matCohortId ? undefined : matCohortId,
+      res = await createMaterial({
+        title: draft.title,
+        content_url: draft.url,
+        description: draft.description || undefined,
+        subject: draft.subject || undefined,
+        cohort_id: draft.cohort === "none" ? undefined : draft.cohort,
       });
     }
-    setMatSubmitting(false);
-    if (result.success) {
-      toast.success("Document added.");
-      setMaterialDialogOpen(false);
-      setMatTitle("");
-      setMatContentUrl("");
-      setMatFile(null);
-      setMatDescription("");
-      setMatCohortId("");
-      queryClient.invalidateQueries({ queryKey: ["materials", institutionId ?? ""] });
-      await refreshSubjects();
-      await loadDocuments();
-    } else {
-      toast.error(result.error);
-    }
-  };
-
-  const handleCreateAnnouncement = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!activeSubjectResolved) {
-      toast.error("Select a subject first.");
+    setSaving(false);
+    if (!res.success) {
+      toast.error(res.error);
       return;
     }
-    if (!annTitle.trim() || !annContent.trim()) {
-      toast.error("Title and content are required.");
-      return;
-    }
-    setAnnSubmitting(true);
-    const result = await createPost({
-      subject: activeSubjectResolved,
-      title: annTitle,
-      content: annContent,
-    });
-    setAnnSubmitting(false);
-    if (result.success) {
-      toast.success("Announcement posted.");
-      setAnnouncementDialogOpen(false);
-      setAnnTitle("");
-      setAnnContent("");
-      queryClient.invalidateQueries({
-        queryKey: ["forum-posts", institutionId ?? "", activeSubjectResolved ?? ""],
-      });
-    } else {
-      toast.error(result.error);
-    }
-  };
+    toast.success("Added. Students in that cohort have been notified.");
+    setDraft(null);
+    refresh();
+  }
 
-  const [subjectInput, setSubjectInput] = useState("");
-  const handleCreateSubjectLabel = () => {
-    const next = subjectInput.trim();
-    if (!next) return;
-    if (!subjects.includes(next)) setSubjects((s) => [next, ...s]);
-    setActiveSubject(next);
-    setSubjectInput("");
-  };
+  async function remove(m: MaterialDto) {
+    if (!confirm(`Remove “${m.title}”?`)) return;
+    const res = await deleteMaterial(m.id);
+    if (!res.success) toast.error(res.error);
+    else {
+      toast.success("Removed.");
+      refresh();
+    }
+  }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Subjects</h1>
-          <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
-            Create subject areas, then add documents (PDF, Word, PowerPoint, or images) with optional descriptions.
-          </p>
-        </div>
-        {canManage && (
-          <div className="flex items-center gap-2">
-            <Input
-              className="w-64"
-              value={subjectInput}
-              onChange={(e) => setSubjectInput(e.target.value)}
-              placeholder="New subject name"
-            />
-            <Button variant="outline" onClick={handleCreateSubjectLabel} type="button">
-              Create subject
+    <div className="space-y-6">
+      <PageHeader
+        title="Materials"
+        description="Notes, past papers and slides, grouped by subject. Students see what's shared with their cohort."
+        actions={
+          isStaff ? (
+            <Button onClick={() => setDraft({ ...EMPTY, subject: active !== "all" && active !== OTHER ? active : "" })}>
+              <Upload /> Add material
             </Button>
-          </div>
-        )}
-      </div>
+          ) : null
+        }
+      />
 
-      <div className="flex gap-4 flex-wrap mb-6">
-        <div className="flex items-center gap-2">
-          <Label className="text-sm text-muted-foreground">Subject:</Label>
-          <Select
-            value={activeSubjectResolved ? activeSubjectResolved : "none"}
-            onValueChange={setActiveSubject}
-          >
-            <SelectTrigger className="w-80">
-              <SelectValue placeholder="Select subject" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="none">No subject selected</SelectItem>
-              {subjects.map((s) => (
-                <SelectItem key={s} value={s}>
-                  {s}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
+      <div className="flex flex-col gap-3">
+        <div className="relative">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search materials" className="pl-9" aria-label="Search materials" />
         </div>
-      </div>
-      <div className="mb-4 flex gap-2 flex-wrap">
-        <Button type="button" variant={tab === "documents" ? "default" : "outline"} onClick={() => setTab("documents")}>
-          Documents
-        </Button>
-        <Button type="button" variant={tab === "announcements" ? "default" : "outline"} onClick={() => setTab("announcements")}>
-          Announcements
-        </Button>
-      </div>
-
-      {tab === "documents" ? (
-        <>
-          {docsLoading && <p className="text-muted-foreground">Loading documents…</p>}
-          {docsError && <p className="text-destructive">Error: {docsError}</p>}
-
-          {!docsLoading && !docsError && (
-            <div className="overflow-hidden rounded-2xl border border-border bg-card">
-              <Table>
-                <TableHeader>
-                  <TableRow>
-                    <TableHead>Title</TableHead>
-                    <TableHead>Cohort</TableHead>
-                    <TableHead>Link</TableHead>
-                    {canManage && <TableHead className="w-[100px] text-right">Actions</TableHead>}
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {documents?.length ? (
-                    documents.map((m) => (
-                      <TableRow key={m.id}>
-                        <TableCell className="font-medium">
-                          <div>{m.title}</div>
-                          {m.description && (
-                            <div className="text-xs text-muted-foreground font-normal mt-0.5">{m.description}</div>
-                          )}
-                        </TableCell>
-                        <TableCell className="text-muted-foreground">
-                          {cohorts?.find((c) => c.id === m.cohort_id)?.name ?? "—"}
-                        </TableCell>
-                        <TableCell>
-                          {m.content_url ? (
-                            <a href={m.content_url} target="_blank" rel="noopener noreferrer" className="text-primary underline">
-                              Open
-                            </a>
-                          ) : (
-                            "—"
-                          )}
-                        </TableCell>
-                        {canManage && (
-                          <TableCell className="text-right">
-                            <Button
-                              type="button"
-                              variant="ghost"
-                              size="sm"
-                              className="text-destructive hover:text-destructive"
-                              disabled={deletingId === m.id}
-                              onClick={async () => {
-                                if (!confirm("Remove this document from the subject?")) return;
-                                setDeletingId(m.id);
-                                const res = await deleteMaterial(m.id);
-                                setDeletingId(null);
-                                if (!res.success) {
-                                  toast.error(res.error);
-                                  return;
-                                }
-                                toast.success("Document removed.");
-                                queryClient.invalidateQueries({ queryKey: ["materials", institutionId ?? ""] });
-                                await refreshSubjects();
-                                await loadDocuments();
-                              }}
-                            >
-                              {deletingId === m.id ? "…" : "Remove"}
-                            </Button>
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    ))
-                  ) : (
-                    <TableRow>
-                      <TableCell
-                        colSpan={canManage ? 4 : 3}
-                        className="text-center text-muted-foreground py-8"
-                      >
-                        {canManage ? (
-                          <>
-                            No documents yet. Use <strong>Upload document</strong> below — PDF, .docx, .pptx, JPEG, or
-                            PNG — or paste a link.
-                          </>
-                        ) : (
-                          "No documents for this subject yet."
-                        )}
-                      </TableCell>
-                    </TableRow>
-                  )}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-
-          {canManage && activeSubjectResolved && (
-            <div className="mt-4 flex justify-end">
-              <Dialog open={materialDialogOpen} onOpenChange={setMaterialDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button>Upload Document</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>Upload document</DialogTitle>
-                    <DialogDescription>
-                      Add a file (PDF, .docx, .pptx, JPEG, PNG) or an external link under “{activeSubjectResolved}”.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleCreateMaterial} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="doc-title">Title</Label>
-                      <Input id="doc-title" value={matTitle} onChange={(e) => setMatTitle(e.target.value)} required />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="doc-file">File</Label>
-                      <Input
-                        id="doc-file"
-                        type="file"
-                        accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png,application/pdf,image/*"
-                        onChange={(e) => {
-                          const f = e.target.files?.[0] ?? null;
-                          setMatFile(f);
-                          if (f) setMatContentUrl("");
-                        }}
-                      />
-                      <p className="text-xs text-muted-foreground">
-                        If you upload a file, the link field is ignored.
-                      </p>
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="doc-url">Or content URL (optional)</Label>
-                      <Input
-                        id="doc-url"
-                        type="url"
-                        value={matContentUrl}
-                        onChange={(e) => {
-                          setMatContentUrl(e.target.value);
-                          if (e.target.value.trim()) setMatFile(null);
-                        }}
-                        placeholder="https://..."
-                        disabled={!!matFile}
-                      />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="doc-desc">Description (optional)</Label>
-                      <Input id="doc-desc" value={matDescription} onChange={(e) => setMatDescription(e.target.value)} />
-                    </div>
-                    <div className="space-y-2">
-                      <Label>Cohort (optional)</Label>
-                      <Select value={matCohortId} onValueChange={setMatCohortId}>
-                        <SelectTrigger>
-                          <SelectValue placeholder="Applies to all cohorts" />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="none">None</SelectItem>
-                          {cohorts?.map((c) => (
-                            <SelectItem key={c.id} value={c.id}>
-                              {c.name}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <DialogFooter>
-                      <Button
-                        type="button"
-                        variant="outline"
-                        onClick={() => {
-                          setMaterialDialogOpen(false);
-                          setMatFile(null);
-                        }}
-                      >
-                        Cancel
-                      </Button>
-                      <Button
-                        type="submit"
-                        disabled={matSubmitting || (!matFile && !matContentUrl.trim())}
-                      >
-                        {matSubmitting ? "Adding…" : "Add"}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            </div>
-          )}
-        </>
-      ) : (
-        <>
-          <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <h2 className="text-base font-bold">Announcements</h2>
-            {canManage && activeSubjectResolved && (
-              <Dialog open={announcementDialogOpen} onOpenChange={setAnnouncementDialogOpen}>
-                <DialogTrigger asChild>
-                  <Button>Post Announcement</Button>
-                </DialogTrigger>
-                <DialogContent>
-                  <DialogHeader>
-                    <DialogTitle>New announcement</DialogTitle>
-                    <DialogDescription>
-                      Post to the forum under “{activeSubjectResolved}”.
-                    </DialogDescription>
-                  </DialogHeader>
-                  <form onSubmit={handleCreateAnnouncement} className="space-y-4">
-                    <div className="space-y-2">
-                      <Label htmlFor="ann-title">Title</Label>
-                      <Input id="ann-title" value={annTitle} onChange={(e) => setAnnTitle(e.target.value)} required />
-                    </div>
-                    <div className="space-y-2">
-                      <Label htmlFor="ann-content">Content</Label>
-                      <textarea
-                        id="ann-content"
-                        className="w-full min-h-32 rounded-lg border border-input bg-transparent px-2.5 py-2 text-sm"
-                        value={annContent}
-                        onChange={(e) => setAnnContent(e.target.value)}
-                        required
-                      />
-                    </div>
-                    <DialogFooter>
-                      <Button type="button" variant="outline" onClick={() => setAnnouncementDialogOpen(false)}>
-                        Cancel
-                      </Button>
-                      <Button type="submit" disabled={annSubmitting}>
-                        {annSubmitting ? "Posting…" : "Post"}
-                      </Button>
-                    </DialogFooter>
-                  </form>
-                </DialogContent>
-              </Dialog>
-            )}
+        {subjects.length > 0 ? (
+          <div className="-mx-4 flex gap-2 overflow-x-auto px-4 pb-1 sm:mx-0 sm:flex-wrap sm:px-0">
+            {[["all", materials.length] as [string, number], ...subjects].map(([s, n]) => (
+              <button
+                key={s}
+                onClick={() => setActive(s)}
+                className={cn(
+                  "shrink-0 rounded-full border px-3.5 py-1.5 text-sm font-semibold transition-colors",
+                  active === s ? "border-primary bg-primary text-primary-foreground" : "border-border bg-card text-muted-foreground hover:text-foreground"
+                )}
+              >
+                {s === "all" ? "All" : s} <span className="opacity-70">{n}</span>
+              </button>
+            ))}
           </div>
+        ) : null}
+      </div>
 
-          {announcementsLoading && <p className="text-muted-foreground">Loading announcements…</p>}
-          {announcementsError && <p className="text-destructive">Error: {announcementsErr?.message}</p>}
-
-          {!announcementsLoading && !announcementsError && (
-            <div className="space-y-3">
-              {announcements?.length ? (
-                announcements.map((p) => (
-                  <div key={p.id} className="overflow-hidden rounded-2xl border border-border bg-card p-4">
-                    <div className="flex items-center justify-between gap-3 flex-wrap">
-                      <div>
-                        <div className="font-medium">{p.title}</div>
-                        <div className="text-xs text-muted-foreground">
-                          {p.subject} · {new Date(p.created_at).toLocaleString()}
-                        </div>
-                      </div>
-                    </div>
-                    <p className="text-sm mt-2 whitespace-pre-wrap">{p.content}</p>
-                    <Button variant="ghost" size="sm" className="mt-2" asChild>
-                      <a href={`/dashboard/community/${p.id}`}>View & reply</a>
-                    </Button>
+      {isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 6 }).map((_, i) => (
+            <div key={i} className="h-36 animate-pulse rounded-2xl bg-muted" />
+          ))}
+        </div>
+      ) : visible.length === 0 ? (
+        <EmptyState
+          icon={BookOpen}
+          title={materials.length ? "Nothing matches" : "No materials yet"}
+          body={materials.length ? "Try another subject or search." : isStaff ? "Upload a PDF, Word file, slides or a photo of notes, or paste a link." : "Your tutors haven't shared anything yet."}
+          action={
+            isStaff && !materials.length ? (
+              <Button onClick={() => setDraft({ ...EMPTY })}>
+                <Upload /> Add material
+              </Button>
+            ) : null
+          }
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {visible.map((m) => {
+            const k = kindOf(m.content_url);
+            return (
+              <article key={m.id} className="group relative flex flex-col rounded-2xl border border-border bg-card p-5 transition-shadow hover:shadow-md">
+                <div className="flex items-start gap-3">
+                  <span className={cn("flex size-10 shrink-0 items-center justify-center rounded-xl", k.tone)}>
+                    <k.icon className="size-5" />
+                  </span>
+                  <div className="min-w-0 flex-1">
+                    <h2 className="line-clamp-2 font-bold leading-snug">{m.title}</h2>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      {m.subject || OTHER} · {k.label}
+                    </p>
                   </div>
-                ))
-              ) : (
-                <p className="text-muted-foreground">No announcements yet for this subject.</p>
-              )}
-            </div>
-          )}
-        </>
+                </div>
+                {m.description ? <p className="mt-3 line-clamp-2 text-sm text-muted-foreground">{m.description}</p> : null}
+                <div className="mt-auto flex items-center justify-between gap-2 pt-4">
+                  {isStaff ? <Badge>{cohortName(m.cohort_id)}</Badge> : <span className="text-xs text-muted-foreground">{new Date(m.created_at).toLocaleDateString("en-GB", { day: "numeric", month: "short" })}</span>}
+                  <div className="flex items-center gap-1">
+                    {isStaff ? (
+                      <Button variant="ghost" size="icon-sm" className="text-muted-foreground hover:text-destructive" onClick={() => remove(m)} aria-label={`Remove ${m.title}`}>
+                        <Trash2 />
+                      </Button>
+                    ) : null}
+                    {m.content_url ? (
+                      <Button asChild size="sm" variant="outline">
+                        <a href={m.content_url} target="_blank" rel="noopener noreferrer">
+                          Open <ExternalLink />
+                        </a>
+                      </Button>
+                    ) : null}
+                  </div>
+                </div>
+              </article>
+            );
+          })}
+        </div>
       )}
+
+      <Dialog open={!!draft} onOpenChange={(o) => !o && setDraft(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Add material</DialogTitle>
+            <DialogDescription>PDF, Word, PowerPoint, JPEG or PNG up to {MAX_MB} MB, or a link to anything else.</DialogDescription>
+          </DialogHeader>
+          {draft ? (
+            <form onSubmit={save} className="space-y-4">
+              <div
+                onDragOver={(e) => {
+                  e.preventDefault();
+                  setDragOver(true);
+                }}
+                onDragLeave={() => setDragOver(false)}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  setDragOver(false);
+                  pickFile(e.dataTransfer.files?.[0] ?? null);
+                }}
+                onClick={() => fileRef.current?.click()}
+                className={cn(
+                  "flex cursor-pointer flex-col items-center rounded-xl border-2 border-dashed px-4 py-6 text-center transition-colors",
+                  dragOver ? "border-primary bg-secondary/60" : "border-border hover:bg-muted/60"
+                )}
+              >
+                <Upload className="size-5 text-primary" />
+                {draft.file ? (
+                  <p className="mt-2 text-sm font-semibold">
+                    {draft.file.name} <span className="font-normal text-muted-foreground">· {(draft.file.size / 1024 / 1024).toFixed(1)} MB</span>
+                  </p>
+                ) : (
+                  <p className="mt-2 text-sm">
+                    <span className="font-semibold text-primary">Choose a file</span> or drop it here
+                  </p>
+                )}
+                <input
+                  ref={fileRef}
+                  type="file"
+                  className="sr-only"
+                  accept=".pdf,.docx,.pptx,.jpg,.jpeg,.png"
+                  onChange={(e) => pickFile(e.target.files?.[0] ?? null)}
+                />
+              </div>
+              {!draft.file ? (
+                <div className="space-y-2">
+                  <Label htmlFor="m-url">Or paste a link</Label>
+                  <Input id="m-url" type="url" value={draft.url} onChange={(e) => setDraft({ ...draft, url: e.target.value })} placeholder="https://youtube.com/…" />
+                </div>
+              ) : (
+                <button type="button" className="text-xs font-semibold text-muted-foreground hover:text-foreground" onClick={() => pickFile(null)}>
+                  Remove file
+                </button>
+              )}
+              <div className="space-y-2">
+                <Label htmlFor="m-title">Title</Label>
+                <Input id="m-title" value={draft.title} onChange={(e) => setDraft({ ...draft, title: e.target.value })} placeholder="Chapter 3 notes" required />
+              </div>
+              <div className="grid grid-cols-2 gap-3">
+                <div className="space-y-2">
+                  <Label htmlFor="m-subject">Subject</Label>
+                  <Input id="m-subject" list="subject-options" value={draft.subject} onChange={(e) => setDraft({ ...draft, subject: e.target.value })} placeholder="Mathematics" />
+                  <datalist id="subject-options">
+                    {subjects.filter(([s]) => s !== OTHER).map(([s]) => (
+                      <option key={s} value={s} />
+                    ))}
+                  </datalist>
+                </div>
+                <div className="space-y-2">
+                  <Label>Share with</Label>
+                  <Select value={draft.cohort} onValueChange={(v) => setDraft({ ...draft, cohort: v })}>
+                    <SelectTrigger>
+                      <SelectValue />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="none">All cohorts</SelectItem>
+                      {cohorts?.map((c) => (
+                        <SelectItem key={c.id} value={c.id}>
+                          {c.name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="m-desc">Note for students</Label>
+                <Input id="m-desc" value={draft.description} onChange={(e) => setDraft({ ...draft, description: e.target.value })} placeholder="Optional" />
+              </div>
+              <DialogFooter>
+                <Button type="button" variant="outline" onClick={() => setDraft(null)}>
+                  Cancel
+                </Button>
+                <Button type="submit" disabled={saving}>
+                  {saving ? (draft.file ? "Uploading…" : "Saving…") : "Add material"}
+                </Button>
+              </DialogFooter>
+            </form>
+          ) : null}
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
-

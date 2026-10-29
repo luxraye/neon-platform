@@ -79,7 +79,7 @@ export async function createMaterial(formData: {
   return { success: true };
 }
 
-const MAX_FILE_BYTES = 50 * 1024 * 1024;
+const MAX_FILE_BYTES = 25 * 1024 * 1024;
 
 /** Upload a file to Cloud Storage and create a materials row. */
 export async function uploadMaterialDocument(formData: FormData): Promise<CreateMaterialResult> {
@@ -99,7 +99,7 @@ export async function uploadMaterialDocument(formData: FormData): Promise<Create
   }
 
   if (file.size > MAX_FILE_BYTES) {
-    return { success: false, error: "File is too large (max 50 MB)." };
+    return { success: false, error: "File is too large (max 25 MB). Share a link instead." };
   }
 
   const ext = file.name.split(".").pop()?.toLowerCase() ?? "";
