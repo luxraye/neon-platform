@@ -43,7 +43,7 @@ All documents carry `id` and (where noted) `created_at`. Optional fields are sto
 | `attendance` | institution_id, cohort_id, student_id, date (YYYY-MM-DD), status (present/late/absent), remarks |
 | `cash_payments` | institution_id, student_id, amount, paid_at, recorded_by |
 | `forum_posts` / `forum_comments` | institution_id, author_id, subject, title, content / post_id, author_id, content |
-| `notifications` | user_id, title, body, type, is_read |
+| `notifications` | user_id, title, message, type, is_read |
 | `leads` | name, email, phone, institution_name, plan, message, status |
 | `financial_reports`, `platform_invoices`, `platform_payment_transactions` | platform billing |
 | `user_feedback` | created_by, institution_id, feedback_type, area, severity, summary, details, screenshot_url, status |

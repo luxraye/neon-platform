@@ -59,10 +59,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${jakarta.variable} ${geistMono.variable} antialiased`}
-      >
+    <html lang="en" className={`${jakarta.variable} ${geistMono.variable}`} suppressHydrationWarning>
+      <body className="antialiased">
         <AppProviders>{children}</AppProviders>
         <Toaster />
       </body>
