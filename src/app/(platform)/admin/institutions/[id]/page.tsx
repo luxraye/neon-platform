@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { getDb } from "@/lib/server/db";
-import { Button } from "@/components/ui/button";
+import { ArrowLeft } from "lucide-react";
+import { PageHeader, StatCard } from "@/components/ui/page";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import {
   Table,
@@ -72,57 +73,24 @@ export default async function AdminInstitutionDetailPage({
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center gap-4">
-        <Button variant="ghost" size="sm" asChild>
-          <Link href="/admin">← Dashboard</Link>
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{inst.name}</h1>
-          <p className="text-muted-foreground font-mono text-sm">{inst.subdomain}</p>
-        </div>
-      </div>
+      <Link href="/admin" className="inline-flex items-center gap-1.5 text-sm font-semibold text-muted-foreground hover:text-foreground">
+        <ArrowLeft className="size-4" /> All centres
+      </Link>
+      <PageHeader
+        title={inst.name}
+        description={<span className="font-mono">/join/{inst.subdomain}</span>}
+      />
 
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Tier</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="capitalize">{inst.subscription_tier}</p>
-            {inst.is_trial && (
-              <p className="text-sm text-warning">
-                Trial ends {inst.trial_ends_at ? new Date(inst.trial_ends_at).toLocaleDateString() : "—"}
-              </p>
-            )}
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Students</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">{studentCount ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Tutors</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">{tutorCount ?? 0}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Cohorts</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">{cohorts?.length ?? 0}</p>
-          </CardContent>
-        </Card>
+        <StatCard
+          tone="primary"
+          label="Plan"
+          value={<span className="capitalize">{inst.subscription_tier}</span>}
+          hint={inst.is_trial ? `Trial ends ${inst.trial_ends_at ? new Date(inst.trial_ends_at).toLocaleDateString("en-GB") : "?"}` : "Paid"}
+        />
+        <StatCard label="Students" value={studentCount ?? 0} />
+        <StatCard label="Tutors" value={tutorCount ?? 0} />
+        <StatCard label="Cohorts" value={cohorts?.length ?? 0} />
       </div>
 
       <Card>
@@ -195,7 +163,7 @@ export default async function AdminInstitutionDetailPage({
                     <TableCell>
                       {payersMap[p.student_id]?.full_name || payersMap[p.student_id]?.email || "—"}
                     </TableCell>
-                    <TableCell>P{p.amount.toFixed(2)}</TableCell>
+                    <TableCell>P{Number(p.amount).toFixed(2)}</TableCell>
                     <TableCell className="text-muted-foreground">
                       {new Date(p.paid_at).toLocaleDateString()}
                     </TableCell>

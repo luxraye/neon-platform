@@ -22,17 +22,8 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { LogoutButton } from "@/components/auth/logout-button";
-import { ThemeToggle } from "@/components/theme/theme-toggle";
+import { Building2, Copy, Inbox, Plus, RotateCcw, Search, Trash2, UserX, Users } from "lucide-react";
+import { Badge, EmptyState, PageHeader, Panel, StatCard } from "@/components/ui/page";
 
 type InstitutionRow = {
   id: string;
@@ -94,6 +85,8 @@ export function AdminDashboard({
   const [deleteModalId, setDeleteModalId] = useState<string | null>(null);
   const [confirmTypedName, setConfirmTypedName] = useState("");
   const [restoringId, setRestoringId] = useState<string | null>(null);
+  const [created, setCreated] = useState<{ email: string; password: string } | null>(null);
+  const [search, setSearch] = useState("");
 
   function openProvisionManual() {
     setName("");
@@ -190,10 +183,7 @@ export function AdminDashboard({
     });
     setLoading(false);
     if (result.success) {
-      toast.success(
-        `Center provisioned. Send this temporary password to the headmaster: ${result.tempPassword}`,
-        { duration: 10000 }
-      );
+      setCreated({ email: headmasterEmail, password: result.tempPassword ?? "" });
       setOpen(false);
       setName("");
       setSubdomain("");
@@ -207,253 +197,211 @@ export function AdminDashboard({
     }
   };
 
+  const q = search.trim().toLowerCase();
+  const visible = institutions.filter((i) => !q || i.name.toLowerCase().includes(q) || i.subdomain.includes(q));
+  const trials = institutions.filter((i) => i.is_trial).length;
+  const deleting = institutions.find((i) => i.id === deleteModalId) ?? null;
+
   return (
     <div className="space-y-6">
-      <header className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Command Center</h1>
-          <p className="text-muted-foreground text-sm">Overview and institution management</p>
-        </div>
-        <div className="flex items-center gap-2">
-          <ThemeToggle className="w-auto justify-start" />
-          <LogoutButton />
-        </div>
-      </header>
+      <PageHeader
+        title="Neon HQ"
+        description="Every centre on the platform, their plans and trials."
+        actions={
+          <Button type="button" onClick={openProvisionManual}>
+            <Plus /> New centre
+          </Button>
+        }
+      />
 
-      <div className="grid gap-4 sm:grid-cols-3">
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Institutions</CardTitle>
-            <CardDescription>Active centers</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">{institutions.length}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Total students</CardTitle>
-            <CardDescription>Across all institutions</CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">{totalStudents}</p>
-          </CardContent>
-        </Card>
-        <Card>
-          <CardHeader className="pb-2">
-            <CardTitle className="text-base">Leads</CardTitle>
-            <CardDescription>
-              <Link href="/admin/leads" className="text-primary hover:underline">
-                {unreadLeadsCount > 0 ? `${unreadLeadsCount} new` : "Inbox"}
-              </Link>
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <p className="text-2xl font-semibold">{leads.length}</p>
-          </CardContent>
-        </Card>
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <StatCard tone="primary" icon={Building2} label="Centres" value={institutions.length} hint={`${trials} on trial`} />
+        <StatCard icon={Users} label="Active students" value={totalStudents.toLocaleString()} hint="Across all centres" />
+        <StatCard icon={Inbox} label="Open leads" value={unreadLeadsCount} hint={`${leads.length} total`} href="/admin/leads" tone={unreadLeadsCount ? "warning" : "default"} />
+        <StatCard icon={UserX} label="Pending removals" value={pendingDeletions.length} hint="Restorable for 72 hours" tone={pendingDeletions.length ? "warning" : "default"} />
       </div>
 
-      <Card>
-        <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-          <div>
-            <CardTitle className="text-lg">Institutions</CardTitle>
-            <CardDescription>View details, extend trial, or remove a center</CardDescription>
+      <Panel
+        title="Centres"
+        action={
+          <div className="relative w-44 sm:w-60">
+            <Search className="pointer-events-none absolute left-2.5 top-1/2 size-3.5 -translate-y-1/2 text-muted-foreground" />
+            <Input value={search} onChange={(e) => setSearch(e.target.value)} placeholder="Search" className="h-8 pl-8 text-sm" aria-label="Search centres" />
           </div>
-          <Button type="button" onClick={openProvisionManual}>
-            Provision New Center
-          </Button>
-        </CardHeader>
-        <CardContent>
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Subdomain</TableHead>
-                <TableHead>Students</TableHead>
-                <TableHead>Tier</TableHead>
-                <TableHead>Trial</TableHead>
-                <TableHead>Trial ends</TableHead>
-                <TableHead className="w-56">Actions</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {institutions.length === 0 ? (
-                <TableRow>
-                  <TableCell colSpan={7} className="text-center text-muted-foreground py-8">
-                    No institutions yet. Use &quot;Provision New Center&quot; to add one.
-                  </TableCell>
-                </TableRow>
-              ) : (
-                institutions.map((inst) => (
-                  <TableRow key={inst.id}>
-                    <TableCell className="font-medium">
-                      <Link href={`/admin/institutions/${inst.id}`} className="text-primary hover:underline">
-                        {inst.name}
-                      </Link>
-                    </TableCell>
-                    <TableCell className="font-mono text-muted-foreground">{inst.subdomain}</TableCell>
-                    <TableCell>{studentCounts[inst.id] ?? 0}</TableCell>
-                    <TableCell>
-                      <Select
-                        value={inst.subscription_tier}
-                        onValueChange={(v) => handleSetTier(inst.id, v as "starter" | "growth" | "elite")}
-                        disabled={tierChangingId === inst.id}
-                      >
-                        <SelectTrigger className="w-24 h-8">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          <SelectItem value="starter">Starter</SelectItem>
-                          <SelectItem value="growth">Growth</SelectItem>
-                          <SelectItem value="elite">Elite</SelectItem>
-                        </SelectContent>
-                      </Select>
-                    </TableCell>
-                    <TableCell>
-                      {inst.is_trial ? (
-                        <span className="text-warning">Trial</span>
-                      ) : (
-                        <span className="text-muted-foreground">—</span>
-                      )}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {inst.trial_ends_at ? new Date(inst.trial_ends_at).toLocaleDateString() : "—"}
-                    </TableCell>
-                    <TableCell>
-                      <div className="flex flex-wrap gap-1">
-                        <Button variant="outline" size="sm" asChild>
-                          <Link href={`/admin/institutions/${inst.id}`}>View</Link>
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => handleExtendTrial(inst.id)}
-                          disabled={extendingId === inst.id}
-                        >
-                          {extendingId === inst.id ? "…" : inst.is_trial ? "Extend trial" : "Start trial"}
-                        </Button>
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          className="text-destructive hover:text-destructive"
-                          onClick={() => {
-                            setDeleteModalId(inst.id);
-                            setConfirmTypedName("");
-                          }}
-                        >
-                          Delete
-                        </Button>
-                      </div>
-                      {deleteModalId === inst.id && (
-                        <div className="mt-2 flex flex-col gap-2 rounded border border-destructive/50 bg-destructive/5 p-2">
-                          <p className="text-xs text-muted-foreground">
-                            Type <strong>{inst.name}</strong> to confirm. This will remove the institution and unlink all
-                            users. It cannot be undone.
-                          </p>
-                          <Input
-                            className="h-8"
-                            placeholder="Institution name"
-                            value={confirmTypedName}
-                            onChange={(e) => setConfirmTypedName(e.target.value)}
-                          />
-                          <div className="flex gap-1">
-                            <Button
-                              size="sm"
-                              variant="destructive"
-                              disabled={deletingId === inst.id || confirmTypedName.trim() !== inst.name}
-                              onClick={() => handleDelete(inst)}
-                            >
-                              {deletingId === inst.id ? "Deleting…" : "Confirm delete"}
-                            </Button>
-                            <Button
-                              size="sm"
-                              variant="outline"
-                              onClick={() => {
-                                setDeleteModalId(null);
-                                setConfirmTypedName("");
-                              }}
-                            >
-                              Cancel
-                            </Button>
-                          </div>
-                        </div>
-                      )}
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </CardContent>
-      </Card>
+        }
+      >
+        {visible.length === 0 ? (
+          <EmptyState icon={Building2} title={institutions.length ? "No match" : "No centres yet"} body={institutions.length ? "Try another name." : "Create the first centre and its headmaster account."} />
+        ) : (
+          <ul className="-my-2 divide-y divide-border">
+            {visible.map((inst) => {
+              const trialEnds = inst.trial_ends_at ? new Date(inst.trial_ends_at) : null;
+              const trialExpired = trialEnds ? trialEnds.getTime() < Date.now() : false;
+              return (
+                <li key={inst.id} className="flex flex-col gap-3 py-3 md:flex-row md:items-center">
+                  <Link href={`/admin/institutions/${inst.id}`} className="group flex min-w-0 flex-1 items-center gap-3">
+                    <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-secondary font-bold text-primary">
+                      {inst.name.slice(0, 1).toUpperCase()}
+                    </span>
+                    <span className="min-w-0">
+                      <span className="block truncate font-semibold group-hover:text-primary">{inst.name}</span>
+                      <span className="block truncate font-mono text-xs text-muted-foreground">/join/{inst.subdomain}</span>
+                    </span>
+                  </Link>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span className="w-24 text-sm">
+                      <strong>{studentCounts[inst.id] ?? 0}</strong> <span className="text-muted-foreground">students</span>
+                    </span>
+                    {inst.is_trial ? (
+                      <Badge tone={trialExpired ? "danger" : "warning"}>
+                        {trialExpired ? "Trial ended" : `Trial to ${trialEnds?.toLocaleDateString("en-GB", { day: "numeric", month: "short" }) ?? "?"}`}
+                      </Badge>
+                    ) : null}
+                    <Select
+                      value={inst.subscription_tier}
+                      onValueChange={(v) => handleSetTier(inst.id, v as "starter" | "growth" | "elite")}
+                      disabled={tierChangingId === inst.id}
+                    >
+                      <SelectTrigger className="h-8 w-28" aria-label={`Plan for ${inst.name}`}>
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent>
+                        <SelectItem value="starter">Starter</SelectItem>
+                        <SelectItem value="growth">Growth</SelectItem>
+                        <SelectItem value="elite">Elite</SelectItem>
+                      </SelectContent>
+                    </Select>
+                    <Button variant="outline" size="sm" onClick={() => handleExtendTrial(inst.id)} disabled={extendingId === inst.id}>
+                      {extendingId === inst.id ? "…" : inst.is_trial ? "+7 days" : "Start trial"}
+                    </Button>
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      className="text-muted-foreground hover:text-destructive"
+                      aria-label={`Delete ${inst.name}`}
+                      onClick={() => {
+                        setDeleteModalId(inst.id);
+                        setConfirmTypedName("");
+                      }}
+                    >
+                      <Trash2 />
+                    </Button>
+                  </div>
+                </li>
+              );
+            })}
+          </ul>
+        )}
+      </Panel>
 
-      {pendingDeletions.length > 0 && (
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Pending deletions</CardTitle>
-            <CardDescription>
-              Accounts removed by headmasters. Restore within 72 hours to recover access.
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Role</TableHead>
-                  <TableHead>Removed at</TableHead>
-                  <TableHead>Recoverable until</TableHead>
-                  <TableHead className="w-24">Actions</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {pendingDeletions.map((p) => {
-                  const recoverable = isRecoverable(p.deleted_at);
-                  const until = recoverableUntil(p.deleted_at);
-                  return (
-                    <TableRow key={p.id}>
-                      <TableCell className="font-medium">{p.full_name ?? "—"}</TableCell>
-                      <TableCell className="text-muted-foreground">{p.email}</TableCell>
-                      <TableCell className="capitalize">{p.role}</TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {new Date(p.deleted_at).toLocaleString()}
-                      </TableCell>
-                      <TableCell className="text-muted-foreground text-sm">
-                        {recoverable
-                          ? until.toLocaleString()
-                          : <span className="text-destructive">Expired</span>}
-                      </TableCell>
-                      <TableCell>
-                        {recoverable ? (
-                          <Button
-                            variant="outline"
-                            size="sm"
-                            disabled={restoringId === p.id}
-                            onClick={() => handleRestore(p.id)}
-                          >
-                            {restoringId === p.id ? "…" : "Restore"}
-                          </Button>
-                        ) : (
-                          "—"
-                        )}
-                      </TableCell>
-                    </TableRow>
+      {pendingDeletions.length > 0 ? (
+        <Panel title="Removed accounts">
+          <p className="mb-3 text-sm text-muted-foreground">Headmasters removed these people. You can restore them for 72 hours.</p>
+          <ul className="-my-2 divide-y divide-border">
+            {pendingDeletions.map((p) => {
+              const recoverable = isRecoverable(p.deleted_at);
+              return (
+                <li key={p.id} className="flex flex-wrap items-center gap-3 py-2.5">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">
+                      {p.full_name || p.email} <span className="text-xs font-normal capitalize text-muted-foreground">· {p.role}</span>
+                    </p>
+                    <p className="truncate text-xs text-muted-foreground">
+                      {p.email} ·{" "}
+                      {recoverable
+                        ? `restorable until ${recoverableUntil(p.deleted_at).toLocaleString("en-GB", { day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" })}`
+                        : "window closed"}
+                    </p>
+                  </div>
+                  {recoverable ? (
+                    <Button variant="outline" size="sm" disabled={restoringId === p.id} onClick={() => handleRestore(p.id)}>
+                      <RotateCcw /> {restoringId === p.id ? "Restoring…" : "Restore"}
+                    </Button>
+                  ) : (
+                    <Badge tone="danger">Expired</Badge>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        </Panel>
+      ) : null}
+
+      <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleteModalId(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Delete {deleting?.name}?</DialogTitle>
+            <DialogDescription>
+              This deletes the centre, its cohorts, materials, quizzes, results and every staff and student account. It can&apos;t be undone.
+            </DialogDescription>
+          </DialogHeader>
+          <div className="space-y-2">
+            <Label htmlFor="confirm-name">Type the centre name to confirm</Label>
+            <Input id="confirm-name" value={confirmTypedName} onChange={(e) => setConfirmTypedName(e.target.value)} placeholder={deleting?.name} />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setDeleteModalId(null)}>
+              Cancel
+            </Button>
+            <Button
+              variant="destructive"
+              disabled={!deleting || deletingId === deleting.id || confirmTypedName.trim() !== deleting.name}
+              onClick={() => deleting && handleDelete(deleting)}
+            >
+              {deleting && deletingId === deleting.id ? "Deleting…" : "Delete forever"}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!created} onOpenChange={(o) => !o && setCreated(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Centre created</DialogTitle>
+            <DialogDescription>
+              Send these sign-in details to the headmaster. The password isn&apos;t shown again; they can change it in Settings.
+            </DialogDescription>
+          </DialogHeader>
+          {created ? (
+            <div className="space-y-2 rounded-xl bg-muted/60 p-4 font-mono text-sm">
+              <p>
+                <span className="text-muted-foreground">Email </span>
+                {created.email}
+              </p>
+              <p>
+                <span className="text-muted-foreground">Password </span>
+                {created.password}
+              </p>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                if (!created) return;
+                try {
+                  await navigator.clipboard.writeText(
+                    `Sign in to Neon at ${window.location.origin}/login\nEmail: ${created.email}\nPassword: ${created.password}`
                   );
-                })}
-              </TableBody>
-            </Table>
-          </CardContent>
-        </Card>
-      )}
+                  toast.success("Copied.");
+                } catch {
+                  toast.error("Couldn't copy. Select the text instead.");
+                }
+              }}
+            >
+              <Copy /> Copy message
+            </Button>
+            <Button onClick={() => setCreated(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
 
       <Dialog open={open} onOpenChange={setOpen}>
         <DialogContent className="sm:max-w-md">
           <DialogHeader>
-            <DialogTitle>Provision New Center</DialogTitle>
+            <DialogTitle>New centre</DialogTitle>
             <DialogDescription>
-              Create a new institution and invite a headmaster. You will share the temporary password with them.
+              Creates the centre and its headmaster account. You get the sign-in details to send them.
             </DialogDescription>
           </DialogHeader>
           <form onSubmit={handleProvision} className="space-y-4">
@@ -468,7 +416,7 @@ export function AdminDashboard({
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="inst-subdomain">Subdomain</Label>
+              <Label htmlFor="inst-subdomain">Join link name</Label>
               <Input
                 id="inst-subdomain"
                 value={subdomain}
@@ -529,7 +477,7 @@ export function AdminDashboard({
                 Cancel
               </Button>
               <Button type="submit" disabled={loading}>
-                {loading ? "Provisioning…" : "Provision"}
+                {loading ? "Creating…" : "Create centre"}
               </Button>
             </DialogFooter>
           </form>
