@@ -9,7 +9,9 @@
     "lint": "eslint",
     "seed:admin": "node scripts/seed-admin.cjs",
     "set-first-admin": "node scripts/set-first-admin.cjs",
-    "repair-headmaster": "node scripts/repair-headmaster-link.cjs"
+    "repair-headmaster": "node scripts/repair-headmaster-link.cjs",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
@@ -42,6 +44,7 @@
     "eslint": "^9",
     "eslint-config-next": "16.1.6",
     "tailwindcss": "^4",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.7"
   }
 }
