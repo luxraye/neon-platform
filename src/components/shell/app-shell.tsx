@@ -55,8 +55,9 @@ export function AppShell({ role, user, centre, hasCohort = true, children }: She
     };
   }, [drawerOpen]);
 
+  // Elite centres get their own action colour across the app.
   const brandStyle = centre.primaryColor
-    ? ({ ["--brand-primary" as string]: centre.primaryColor } as React.CSSProperties)
+    ? ({ ["--primary" as string]: centre.primaryColor, ["--ring" as string]: centre.primaryColor } as React.CSSProperties)
     : undefined;
 
   const sidebar = (

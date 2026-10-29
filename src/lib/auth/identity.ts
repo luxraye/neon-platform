@@ -4,6 +4,7 @@ import { cache } from "react";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
 import { getDb } from "@/lib/server/db";
+import { getEffectiveTier } from "@/lib/billing";
 import { getSessionUser } from "@/lib/auth/session";
 import { SESSION_LOCK_COOKIE } from "@/lib/session-lock";
 
@@ -74,12 +75,16 @@ export const getUserIdentity = cache(async (): Promise<UserIdentity | null> => {
   if (institution_id) {
     const { data: inst } = await db
       .from("institutions")
-      .select("name, primary_color, logo_url")
+      .select("name, primary_color, logo_url, subscription_tier, is_trial")
       .eq("id", institution_id)
       .maybeSingle();
     institution_name = inst?.name ?? null;
-    institution_primary_color = inst?.primary_color ?? null;
-    institution_logo_url = inst?.logo_url ?? null;
+    // Custom branding is an Elite feature; other plans keep Neon's look.
+    if (getEffectiveTier(inst?.subscription_tier, inst?.is_trial) === "elite") {
+      const color = typeof inst?.primary_color === "string" ? inst.primary_color : "";
+      institution_primary_color = /^#[0-9a-f]{6}$/i.test(color) ? color : null;
+      institution_logo_url = inst?.logo_url ?? null;
+    }
   }
 
   return {

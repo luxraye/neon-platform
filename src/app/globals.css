@@ -60,7 +60,7 @@
  * Neon design tokens.
  * Ink (near-black navy) carries the structure, electric violet is the action colour, and the
  * "neon" lime is a rare highlight: active nav, key numbers, the logo. Centres on the Elite
- * plan override --brand-primary with their own colour.
+ * plan override --primary with their own colour (see AppShell).
  */
 :root {
   --ink: #0e1024;
@@ -106,7 +106,6 @@
   --sidebar-border: #23264a;
   --sidebar-ring: #8b76ff;
 
-  --brand-primary: var(--primary);
 }
 
 .dark {
