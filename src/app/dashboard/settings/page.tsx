@@ -56,13 +56,13 @@ export default function SettingsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-2">Settings</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">Settings</h1>
       <p className="text-muted-foreground mb-6">Account personalization and institution options.</p>
 
       <div className="mb-8">
-        <div className="rounded-lg border bg-card p-4 flex items-center justify-between gap-3 flex-wrap">
+        <div className="overflow-hidden rounded-2xl border border-border bg-card p-4 flex items-center justify-between gap-3 flex-wrap">
           <div>
-            <h2 className="text-base font-medium">Your account</h2>
+            <h2 className="text-base font-bold">Your account</h2>
             <p className="text-sm text-muted-foreground">
               Edit your name/avatar and change your password.
             </p>
@@ -76,8 +76,8 @@ export default function SettingsPage() {
       <FeatureGate feature="custom_branding" fallback={<BrandingUpgradeMessage />}>
         <div className="space-y-8 max-w-md">
           <div className="space-y-2">
-            <h2 className="text-lg font-medium">Branding preview</h2>
-            <div className="rounded-lg border bg-card p-4">
+            <h2 className="text-base font-bold">Branding preview</h2>
+            <div className="overflow-hidden rounded-2xl border border-border bg-card p-4">
               <div className="flex items-center gap-3 mb-3">
                 {institution?.logo_url ? (
                   <img
@@ -110,7 +110,7 @@ export default function SettingsPage() {
           </div>
 
           <form onSubmit={handleColorSubmit} className="space-y-4">
-            <h2 className="text-lg font-medium">Branding (Elite)</h2>
+            <h2 className="text-base font-bold">Branding (Elite)</h2>
             <div className="space-y-2">
               <Label htmlFor="primary_color">Primary color</Label>
               <div className="flex gap-2 items-center">

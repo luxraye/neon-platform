@@ -34,7 +34,7 @@ export default async function PricingGuidePage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Pricing Guide</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Pricing Guide</h1>
         <p className="text-sm text-muted-foreground mt-1">
           Clear breakdown of what each Neon plan includes. Pricing values are centrally configurable.
         </p>
@@ -56,7 +56,7 @@ export default async function PricingGuidePage() {
             <span className="font-medium">Effective feature tier right now:</span> {effectiveTier.toUpperCase()}
           </p>
           {isTrial ? (
-            <p className="text-emerald-600 dark:text-emerald-400">
+            <p className="text-success">
               Trial mode unlocks Elite-level features so your team can evaluate the full platform.
             </p>
           ) : null}

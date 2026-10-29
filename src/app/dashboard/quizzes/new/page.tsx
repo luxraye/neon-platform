@@ -130,7 +130,7 @@ export default function NewQuizPage() {
           <Link href={quizzesHref}>← Quizzes</Link>
         </Button>
       </div>
-      <h1 className="text-2xl font-semibold mb-2">New quiz</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">New quiz</h1>
       <p className="text-sm text-muted-foreground mb-6 max-w-xl">
         Multiple choice only. Students see a countdown for the time limit you set below when they take the quiz.
       </p>

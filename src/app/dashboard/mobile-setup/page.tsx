@@ -12,7 +12,7 @@ export default function MobileSetupPage() {
 
   return (
     <div className="mx-auto max-w-md space-y-6">
-      <h1 className="text-2xl font-semibold">Add Neon to your phone</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Add Neon to your phone</h1>
       <p className="text-muted-foreground">
         Install Neon on your home screen for quick access to materials and quizzes.
       </p>

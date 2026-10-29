@@ -1,22 +1,14 @@
 "use client";
 
-import { useState } from "react";
-import { usePathname } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { MoreHorizontal, Pencil, Plus, Trash2, Users, UsersRound } from "lucide-react";
 import { useProfile } from "@/hooks/use-profile";
-import { useCohorts } from "@/hooks/use-cohorts";
-import { useQuery } from "@tanstack/react-query";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   Dialog,
   DialogContent,
@@ -24,410 +16,271 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
+import { Badge, EmptyState, PageHeader, Panel } from "@/components/ui/page";
 import { createCohort, deleteCohort, getCohorts, updateCohort } from "./actions";
 import { assignStudentToCohort, getStaff } from "../staff/actions";
 
+type Cohort = { id: string; name: string; description: string | null; created_at: string };
+type Editing = { id: string | null; name: string; description: string } | null;
+
 export default function CohortsPage() {
-  const pathname = usePathname();
   const queryClient = useQueryClient();
-  const { data: profileData } = useProfile();
-  const institutionId = profileData?.profile?.institution_id ?? null;
-  const isHeadmasterRoute = pathname != null && pathname.startsWith("/headmaster");
-  const isTutorRoute = pathname != null && pathname.startsWith("/tutor");
-  const { data: cohortsFromServer, isLoading: cohortsServerLoading } = useQuery({
-    queryKey: ["cohorts", "list"],
-    queryFn: getCohorts,
-    enabled: !!isHeadmasterRoute || !!isTutorRoute,
-  });
-  const clientCohorts = useCohorts(institutionId);
-  const isStaffRoute = isHeadmasterRoute || isTutorRoute;
-  const cohorts = isStaffRoute ? (cohortsFromServer ?? null) : clientCohorts.data ?? null;
-  const isLoading = isStaffRoute ? cohortsServerLoading : clientCohorts.isLoading;
-  const isError = clientCohorts.isError;
-  const error = clientCohorts.error;
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [name, setName] = useState("");
-  const [description, setDescription] = useState("");
-  const [submitting, setSubmitting] = useState(false);
+  const { data: me } = useProfile();
+  const role = me?.profile?.role;
+  const canManage = role === "headmaster" || role === "tutor";
 
-  // Tutor-only: assign unassigned students to cohorts
-  const { data: staffPayload } = useQuery({
-    queryKey: ["staff", "cohorts-assignment", institutionId ?? ""],
-    queryFn: () => getStaff(institutionId ?? "", []),
-    enabled: !!isTutorRoute,
-  });
-  const unassignedStudents =
-    (staffPayload?.students ?? []).filter((s) => !s.cohort_id) ?? [];
+  const cohortsQ = useQuery({ queryKey: ["cohorts", "list"], queryFn: getCohorts });
+  const staffQ = useQuery({ queryKey: ["staff", "list"], queryFn: () => getStaff(), enabled: canManage });
 
-  const [assignDialogOpen, setAssignDialogOpen] = useState(false);
-  const [assigningStudentId, setAssigningStudentId] = useState<string | null>(null);
-  const [assignmentCohortId, setAssignmentCohortId] = useState<string>("");
-  const [assigning, setAssigning] = useState(false);
+  const cohorts = (cohortsQ.data ?? []) as Cohort[];
+  const students = useMemo(() => (staffQ.data?.students ?? []).filter((s) => !s.deleted_at), [staffQ.data]);
+  const counts = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const s of students) if (s.cohort_id) m[s.cohort_id] = (m[s.cohort_id] ?? 0) + 1;
+    return m;
+  }, [students]);
+  const unassigned = students.filter((s) => !s.cohort_id);
 
-  const [editOpen, setEditOpen] = useState(false);
-  const [editingId, setEditingId] = useState<string | null>(null);
-  const [editName, setEditName] = useState("");
-  const [editDescription, setEditDescription] = useState("");
-  const [editSubmitting, setEditSubmitting] = useState(false);
+  const [editing, setEditing] = useState<Editing>(null);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState<Cohort | null>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [menuFor, setMenuFor] = useState<string | null>(null);
 
-  const [deleteOpen, setDeleteOpen] = useState(false);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deleteSubmitting, setDeleteSubmitting] = useState(false);
-
-  const canCreateCohorts =
-    profileData?.profile?.role === "headmaster" ||
-    profileData?.profile?.role === "tutor" ||
-    isHeadmasterRoute ||
-    isTutorRoute;
-
-  const handleCreate = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    const result = await createCohort({ name, description });
-    setSubmitting(false);
-    if (result.success) {
-      toast.success("Cohort created.");
-      setDialogOpen(false);
-      setName("");
-      setDescription("");
-      queryClient.invalidateQueries({ queryKey: ["cohorts", institutionId ?? ""] });
-      queryClient.invalidateQueries({ queryKey: ["cohorts", "list"] });
-    } else {
-      toast.error(result.error);
-    }
+  const refresh = () => {
+    queryClient.invalidateQueries({ queryKey: ["cohorts"] });
+    queryClient.invalidateQueries({ queryKey: ["staff"] });
   };
 
+  async function save(e: React.FormEvent) {
+    e.preventDefault();
+    if (!editing) return;
+    setSaving(true);
+    const payload = { name: editing.name, description: editing.description };
+    const res = editing.id ? await updateCohort(editing.id, payload) : await createCohort(payload);
+    setSaving(false);
+    if (!res.success) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(editing.id ? "Cohort updated." : "Cohort created.");
+    setEditing(null);
+    refresh();
+  }
+
+  async function confirmDelete() {
+    if (!deleting) return;
+    setSaving(true);
+    const res = await deleteCohort(deleting.id);
+    setSaving(false);
+    if (!res.success) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success("Cohort deleted.");
+    setDeleting(null);
+    refresh();
+  }
+
+  async function assign(studentId: string, cohortId: string) {
+    setBusyId(studentId);
+    const res = await assignStudentToCohort(studentId, cohortId);
+    setBusyId(null);
+    if (!res.success) toast.error(res.error);
+    else {
+      toast.success("Student placed.");
+      refresh();
+    }
+  }
+
   return (
-    <div>
-      <Dialog open={editOpen} onOpenChange={setEditOpen}>
+    <div className="space-y-6">
+      <PageHeader
+        title="Cohorts"
+        description="Group students into classes. Materials, quizzes and timetable slots can target a cohort."
+        actions={
+          canManage ? (
+            <Button onClick={() => setEditing({ id: null, name: "", description: "" })}>
+              <Plus /> New cohort
+            </Button>
+          ) : null
+        }
+      />
+
+      {canManage && unassigned.length > 0 && cohorts.length > 0 ? (
+        <Panel
+          title={
+            <span className="flex items-center gap-2">
+              Needs a cohort <Badge tone="warning">{unassigned.length}</Badge>
+            </span>
+          }
+        >
+          <p className="mb-3 text-sm text-muted-foreground">
+            These students can&apos;t see materials or quizzes until they&apos;re in a cohort.
+          </p>
+          <ul className="-my-2 divide-y divide-border">
+            {unassigned.map((s) => (
+              <li key={s.id} className="flex flex-wrap items-center gap-3 py-2.5 sm:flex-nowrap">
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{s.full_name || s.email}</p>
+                  <p className="truncate text-xs text-muted-foreground">{s.email}</p>
+                </div>
+                <Select onValueChange={(v) => assign(s.id, v)} disabled={busyId === s.id}>
+                  <SelectTrigger className="w-full sm:w-48" aria-label={`Cohort for ${s.full_name || s.email}`}>
+                    <SelectValue placeholder="Place in…" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {cohorts.map((c) => (
+                      <SelectItem key={c.id} value={c.id}>
+                        {c.name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </li>
+            ))}
+          </ul>
+        </Panel>
+      ) : null}
+
+      {cohortsQ.isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-36 animate-pulse rounded-2xl bg-muted" />
+          ))}
+        </div>
+      ) : cohorts.length === 0 ? (
+        <EmptyState
+          icon={UsersRound}
+          title="No cohorts yet"
+          body="Create one for each class or grade, for example “Form 5 Science”."
+          action={
+            canManage ? (
+              <Button onClick={() => setEditing({ id: null, name: "", description: "" })}>
+                <Plus /> New cohort
+              </Button>
+            ) : null
+          }
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {cohorts.map((c) => (
+            <article key={c.id} className="relative flex flex-col rounded-2xl border border-border bg-card p-5">
+              <div className="flex items-start justify-between gap-2">
+                <span className="flex size-10 items-center justify-center rounded-xl bg-secondary text-primary">
+                  <UsersRound className="size-5" />
+                </span>
+                {canManage ? (
+                  <div className="relative">
+                    <Button
+                      variant="ghost"
+                      size="icon-sm"
+                      aria-label={`Options for ${c.name}`}
+                      onClick={() => setMenuFor(menuFor === c.id ? null : c.id)}
+                    >
+                      <MoreHorizontal />
+                    </Button>
+                    {menuFor === c.id ? (
+                      <div
+                        className="absolute right-0 z-10 mt-1 w-36 overflow-hidden rounded-xl border border-border bg-popover p-1 shadow-lg"
+                        onMouseLeave={() => setMenuFor(null)}
+                      >
+                        <button
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm hover:bg-muted"
+                          onClick={() => {
+                            setMenuFor(null);
+                            setEditing({ id: c.id, name: c.name, description: c.description ?? "" });
+                          }}
+                        >
+                          <Pencil className="size-4" /> Rename
+                        </button>
+                        <button
+                          className="flex w-full items-center gap-2 rounded-lg px-2.5 py-2 text-sm text-destructive hover:bg-destructive/10"
+                          onClick={() => {
+                            setMenuFor(null);
+                            setDeleting(c);
+                          }}
+                        >
+                          <Trash2 className="size-4" /> Delete
+                        </button>
+                      </div>
+                    ) : null}
+                  </div>
+                ) : null}
+              </div>
+              <h2 className="mt-4 text-lg font-bold">{c.name}</h2>
+              <p className="mt-1 line-clamp-2 flex-1 text-sm text-muted-foreground">
+                {c.description || "No description"}
+              </p>
+              {canManage ? (
+                <p className="mt-4 flex items-center gap-1.5 text-sm font-semibold">
+                  <Users className="size-4 text-primary" />
+                  {counts[c.id] ?? 0} {(counts[c.id] ?? 0) === 1 ? "student" : "students"}
+                </p>
+              ) : null}
+            </article>
+          ))}
+        </div>
+      )}
+
+      <Dialog open={!!editing} onOpenChange={(o) => !o && setEditing(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Edit cohort</DialogTitle>
-            <DialogDescription>Update the cohort name or description.</DialogDescription>
+            <DialogTitle>{editing?.id ? "Rename cohort" : "New cohort"}</DialogTitle>
+            <DialogDescription>Use a name students will recognise, like their class or grade.</DialogDescription>
           </DialogHeader>
-          <form
-            onSubmit={async (e) => {
-              e.preventDefault();
-              if (!editingId) return;
-              setEditSubmitting(true);
-              const result = await updateCohort(editingId, {
-                name: editName,
-                description: editDescription,
-              });
-              setEditSubmitting(false);
-              if (!result.success) {
-                toast.error(result.error);
-                return;
-              }
-              toast.success("Cohort updated.");
-              setEditOpen(false);
-              setEditingId(null);
-              queryClient.invalidateQueries({ queryKey: ["cohorts", institutionId ?? ""] });
-              queryClient.invalidateQueries({ queryKey: ["cohorts", "list"] });
-            }}
-            className="space-y-4"
-          >
+          <form onSubmit={save} className="space-y-4">
             <div className="space-y-2">
-              <Label htmlFor="edit-cohort-name">Name</Label>
+              <Label htmlFor="cohort-name">Name</Label>
               <Input
-                id="edit-cohort-name"
-                value={editName}
-                onChange={(e) => setEditName(e.target.value)}
+                id="cohort-name"
+                value={editing?.name ?? ""}
+                onChange={(e) => setEditing((p) => (p ? { ...p, name: e.target.value } : p))}
+                placeholder="Form 5 Science"
                 required
               />
             </div>
             <div className="space-y-2">
-              <Label htmlFor="edit-cohort-desc">Description (optional)</Label>
+              <Label htmlFor="cohort-desc">Description</Label>
               <Input
-                id="edit-cohort-desc"
-                value={editDescription}
-                onChange={(e) => setEditDescription(e.target.value)}
+                id="cohort-desc"
+                value={editing?.description ?? ""}
+                onChange={(e) => setEditing((p) => (p ? { ...p, description: e.target.value } : p))}
+                placeholder="Optional"
               />
             </div>
             <DialogFooter>
-              <Button type="button" variant="outline" onClick={() => setEditOpen(false)} disabled={editSubmitting}>
+              <Button type="button" variant="outline" onClick={() => setEditing(null)}>
                 Cancel
               </Button>
-              <Button type="submit" disabled={editSubmitting}>
-                {editSubmitting ? "Saving…" : "Save"}
+              <Button type="submit" disabled={saving}>
+                {saving ? "Saving…" : editing?.id ? "Save" : "Create"}
               </Button>
             </DialogFooter>
           </form>
         </DialogContent>
       </Dialog>
 
-      <Dialog open={deleteOpen} onOpenChange={setDeleteOpen}>
+      <Dialog open={!!deleting} onOpenChange={(o) => !o && setDeleting(null)}>
         <DialogContent>
           <DialogHeader>
-            <DialogTitle>Delete cohort?</DialogTitle>
+            <DialogTitle>Delete {deleting?.name}?</DialogTitle>
             <DialogDescription>
-              This cannot be undone. Students linked to this cohort may need to be reassigned first.
+              Students in this cohort will need a new one. Materials, quizzes and timetable slots for it are deleted too.
+              This can&apos;t be undone.
             </DialogDescription>
           </DialogHeader>
           <DialogFooter>
-            <Button type="button" variant="outline" onClick={() => setDeleteOpen(false)} disabled={deleteSubmitting}>
+            <Button variant="outline" onClick={() => setDeleting(null)}>
               Cancel
             </Button>
-            <Button
-              type="button"
-              variant="destructive"
-              disabled={deleteSubmitting}
-              onClick={async () => {
-                if (!deletingId) return;
-                setDeleteSubmitting(true);
-                const result = await deleteCohort(deletingId);
-                setDeleteSubmitting(false);
-                if (!result.success) {
-                  toast.error(result.error);
-                  return;
-                }
-                toast.success("Cohort deleted.");
-                setDeleteOpen(false);
-                setDeletingId(null);
-                queryClient.invalidateQueries({ queryKey: ["cohorts", institutionId ?? ""] });
-                queryClient.invalidateQueries({ queryKey: ["cohorts", "list"] });
-              }}
-            >
-              {deleteSubmitting ? "Deleting…" : "Delete"}
+            <Button variant="destructive" disabled={saving} onClick={confirmDelete}>
+              {saving ? "Deleting…" : "Delete cohort"}
             </Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
-
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Cohorts</h1>
-        {canCreateCohorts && (
-          <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-            <DialogTrigger asChild>
-              <Button>Create Cohort</Button>
-            </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Create Cohort</DialogTitle>
-                <DialogDescription>
-                  Add a new cohort for your institution.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleCreate} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="cohort-name">Name</Label>
-                  <Input
-                    id="cohort-name"
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    placeholder="e.g. Class of 2025"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="cohort-desc">Description (optional)</Label>
-                  <Input
-                    id="cohort-desc"
-                    value={description}
-                    onChange={(e) => setDescription(e.target.value)}
-                    placeholder="Brief description"
-                  />
-                </div>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={submitting}>
-                    {submitting ? "Creating…" : "Create"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        )}
-      </div>
-
-      {isTutorRoute && (
-        <div className="rounded-lg border bg-card p-4 mb-6">
-          <div className="flex items-center justify-between gap-3 flex-wrap mb-3">
-            <h2 className="text-lg font-medium">Assign Students to Cohorts</h2>
-            <p className="text-sm text-muted-foreground">
-              Tutors can assign unassigned students so they can access materials/quizzes.
-            </p>
-          </div>
-
-          {!unassignedStudents.length ? (
-            <p className="text-muted-foreground">No unassigned students.</p>
-          ) : (
-            <div className="space-y-3">
-              {unassignedStudents.map((s) => (
-                <div key={s.id} className="flex items-center justify-between gap-3 flex-wrap">
-                  <div>
-                    <div className="font-medium">{s.full_name ?? s.email}</div>
-                    <div className="text-xs text-muted-foreground">{s.email}</div>
-                  </div>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    onClick={() => {
-                      setAssigningStudentId(s.id);
-                      setAssignmentCohortId("");
-                      setAssignDialogOpen(true);
-                    }}
-                  >
-                    Assign
-                  </Button>
-                </div>
-              ))}
-            </div>
-          )}
-
-          <Dialog open={assignDialogOpen} onOpenChange={setAssignDialogOpen}>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Assign student</DialogTitle>
-                <DialogDescription>
-                  Choose a cohort for this student.
-                </DialogDescription>
-              </DialogHeader>
-
-              <form
-                onSubmit={async (e) => {
-                  e.preventDefault();
-                  if (!assigningStudentId) return;
-                  if (!assignmentCohortId) {
-                    toast.error("Select a cohort.");
-                    return;
-                  }
-                  setAssigning(true);
-                  const result = await assignStudentToCohort(assigningStudentId, assignmentCohortId);
-                  setAssigning(false);
-                  if (!result.success) {
-                    toast.error(result.error);
-                    return;
-                  }
-                  toast.success("Student assigned.");
-                  setAssignDialogOpen(false);
-                  setAssigningStudentId(null);
-                  queryClient.invalidateQueries({ queryKey: ["staff", "cohorts-assignment"] });
-                }}
-                className="space-y-4"
-              >
-                <div className="space-y-2">
-                  <Label>Cohort</Label>
-                  <Select value={assignmentCohortId} onValueChange={setAssignmentCohortId}>
-                    <SelectTrigger className="w-full">
-                      <SelectValue placeholder="Select cohort" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {cohorts?.map((c) => (
-                        <SelectItem key={c.id} value={c.id}>
-                          {c.name}
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-
-                <DialogFooter>
-                  <Button type="button" variant="outline" onClick={() => setAssignDialogOpen(false)} disabled={assigning}>
-                    Cancel
-                  </Button>
-                  <Button type="submit" disabled={assigning}>
-                    {assigning ? "Assigning…" : "Assign"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-        </div>
-      )}
-
-      {isLoading && (
-        <p className="text-muted-foreground">Loading cohorts…</p>
-      )}
-      {isError && (
-        <p className="text-destructive">Error: {error?.message}</p>
-      )}
-      {!isLoading && !isError && (
-        <div className="rounded-lg border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Name</TableHead>
-                <TableHead>Description</TableHead>
-                <TableHead>Created</TableHead>
-                {canCreateCohorts && <TableHead className="w-[140px] text-right">Actions</TableHead>}
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {!cohorts?.length ? (
-                <TableRow>
-                  <TableCell
-                    colSpan={canCreateCohorts ? 4 : 3}
-                    className="text-center text-muted-foreground py-8"
-                  >
-                    No cohorts yet. {canCreateCohorts ? "Create one to get started." : ""}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                cohorts.map((c) => (
-                  <TableRow key={c.id}>
-                    <TableCell className="font-medium">{c.name}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {c.description ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {new Date(c.created_at).toLocaleDateString()}
-                    </TableCell>
-                    {canCreateCohorts && (
-                      <TableCell className="text-right">
-                        <div className="flex justify-end gap-2">
-                          <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            onClick={() => {
-                              setEditingId(c.id);
-                              setEditName(c.name);
-                              setEditDescription(c.description ?? "");
-                              setEditOpen(true);
-                            }}
-                          >
-                            Edit
-                          </Button>
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:text-destructive"
-                            onClick={() => {
-                              setDeletingId(c.id);
-                              setDeleteOpen(true);
-                            }}
-                          >
-                            Delete
-                          </Button>
-                        </div>
-                      </TableCell>
-                    )}
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
-        </div>
-      )}
     </div>
   );
 }

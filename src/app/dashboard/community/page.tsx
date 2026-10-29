@@ -89,7 +89,7 @@ export default function CommunityPage() {
     return (
       <FeatureGate feature="community" fallback={<CommunityUpgradeMessage />}>
         <div className="px-2 sm:px-4">
-          <h1 className="text-xl sm:text-2xl font-semibold mb-2">Community</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">Community</h1>
           <p className="text-muted-foreground">
             You need a cohort assignment before you can access the community forum.
           </p>
@@ -118,7 +118,7 @@ export default function CommunityPage() {
     <FeatureGate feature="community" fallback={<CommunityUpgradeMessage />}>
     <div className="min-h-0 w-full px-2 sm:px-4 pb-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between mb-4 sm:mb-6 gap-3">
-        <h1 className="text-xl sm:text-2xl font-semibold">Community</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Community</h1>
         <div className="flex flex-wrap items-center gap-2">
           <Select
             value={subjectFilter ?? "all"}
@@ -231,7 +231,7 @@ export default function CommunityPage() {
 function CommunityUpgradeMessage() {
   return (
     <div className="px-2 sm:px-4">
-      <h1 className="text-xl font-semibold mb-2">Community</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">Community</h1>
       <p className="text-muted-foreground">Community forum is available on Growth and Elite plans. Contact your admin to upgrade.</p>
     </div>
   );

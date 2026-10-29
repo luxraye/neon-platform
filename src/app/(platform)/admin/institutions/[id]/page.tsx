@@ -80,7 +80,7 @@ export default async function AdminInstitutionDetailPage({
 
       <div className="flex flex-wrap items-start justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-semibold">{inst.name}</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{inst.name}</h1>
           <p className="text-muted-foreground font-mono text-sm">{inst.subdomain}</p>
         </div>
       </div>
@@ -93,7 +93,7 @@ export default async function AdminInstitutionDetailPage({
           <CardContent>
             <p className="capitalize">{inst.subscription_tier}</p>
             {inst.is_trial && (
-              <p className="text-sm text-amber-600 dark:text-amber-400">
+              <p className="text-sm text-warning">
                 Trial ends {inst.trial_ends_at ? new Date(inst.trial_ends_at).toLocaleDateString() : "—"}
               </p>
             )}

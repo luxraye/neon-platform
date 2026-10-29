@@ -42,7 +42,7 @@ export default function ProgressPage() {
   if (!profileData?.profile) {
     return (
       <div className="px-2 sm:px-4">
-        <h1 className="text-xl font-semibold mb-2">My Progress</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">My Progress</h1>
         <p className="text-muted-foreground text-sm">Loading…</p>
       </div>
     );
@@ -54,7 +54,7 @@ export default function ProgressPage() {
         <Button variant="ghost" size="sm" asChild>
           <Link href="/dashboard/learn">← Learn</Link>
         </Button>
-        <h1 className="text-xl font-semibold mt-4 mb-2">My Progress</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mt-4 mb-2">My Progress</h1>
         <p className="text-muted-foreground text-sm">This view is for students. Go to Learn to manage content.</p>
       </div>
     );
@@ -77,7 +77,7 @@ export default function ProgressPage() {
       <Button variant="ghost" size="sm" asChild>
         <Link href="/dashboard/learn">← Learn</Link>
       </Button>
-      <h1 className="text-xl sm:text-2xl font-semibold mt-4 mb-4">My Progress</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mt-4 mb-4">My Progress</h1>
 
       {isLoading && <p className="text-muted-foreground text-sm">Loading…</p>}
       {!isLoading && (!attempts?.length ? (
@@ -85,7 +85,7 @@ export default function ProgressPage() {
       ) : (
         <>
           <section className="mb-8">
-            <h2 className="text-base font-medium mb-3">Scores over time</h2>
+            <h2 className="text-base font-bold mb-3">Scores over time</h2>
             <div className="flex items-end gap-1 h-40">
               {byDate.map((a) => (
                 <div
@@ -106,7 +106,7 @@ export default function ProgressPage() {
           </section>
 
           <section>
-            <h2 className="text-base font-medium mb-3">Subject / quiz breakdown</h2>
+            <h2 className="text-base font-bold mb-3">Subject / quiz breakdown</h2>
             <div className="space-y-2">
               {Object.entries(byQuizTitle).map(([title, { sum, count }]) => {
                 const avg = count ? sum / count : 0;

@@ -61,7 +61,7 @@ export default function LearnPage() {
   if (!profileData?.profile) {
     return (
       <div className="px-2 sm:px-4">
-        <h1 className="text-xl sm:text-2xl font-semibold mb-2">Learn</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">Learn</h1>
         <p className="text-muted-foreground text-sm">Loading…</p>
       </div>
     );
@@ -70,7 +70,7 @@ export default function LearnPage() {
   if (profileData.profile.role !== "student") {
     return (
       <div className="px-2 sm:px-4">
-        <h1 className="text-xl sm:text-2xl font-semibold mb-2">Learn</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">Learn</h1>
         <p className="text-muted-foreground text-sm">This page is for students. Go to Materials or Quizzes to manage content.</p>
       </div>
     );
@@ -79,7 +79,7 @@ export default function LearnPage() {
   if (!cohortId) {
     return (
       <div className="px-2 sm:px-4">
-        <h1 className="text-xl sm:text-2xl font-semibold mb-2">Learn</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">Learn</h1>
         <p className="text-muted-foreground text-sm">
           You’re not assigned to a cohort yet. A headmaster will assign you so you can access materials and quizzes.
         </p>
@@ -117,10 +117,10 @@ export default function LearnPage() {
   return (
     <>
       <div className="min-h-0 w-full px-2 sm:px-4 pb-6">
-        <h1 className="text-xl sm:text-2xl font-semibold mb-4 sm:mb-6">Learn</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-4 sm:mb-6">Learn</h1>
 
         <section className="mb-6 sm:mb-8">
-          <h2 className="text-base sm:text-lg font-medium mb-2 sm:mb-3">Materials</h2>
+          <h2 className="text-base font-bold mb-2 sm:mb-3">Materials</h2>
           {materialsLoading && <p className="text-muted-foreground text-sm">Loading materials…</p>}
           {!materialsLoading && (!materials?.length ? (
             <p className="text-muted-foreground text-sm">No materials for your cohort yet.</p>
@@ -155,7 +155,7 @@ export default function LearnPage() {
         </section>
 
         <section>
-          <h2 className="text-base sm:text-lg font-medium mb-2 sm:mb-3">Quizzes</h2>
+          <h2 className="text-base font-bold mb-2 sm:mb-3">Quizzes</h2>
           {quizzesLoading && <p className="text-muted-foreground text-sm">Loading quizzes…</p>}
           {!quizzesLoading && (!quizzes?.length ? (
             <p className="text-muted-foreground text-sm">No quizzes for your cohort yet.</p>

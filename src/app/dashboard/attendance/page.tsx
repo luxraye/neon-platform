@@ -103,7 +103,7 @@ export default function AttendancePage() {
   if (!isStaff) {
     return (
       <div>
-        <h1 className="text-2xl font-semibold mb-2">Attendance</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">Attendance</h1>
         <p className="text-muted-foreground">Only tutors and headmasters can mark attendance.</p>
       </div>
     );
@@ -111,7 +111,7 @@ export default function AttendancePage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-4">Daily Attendance</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-4">Daily Attendance</h1>
       <div className="flex flex-wrap gap-4 mb-6">
         <div>
           <Label className="mr-2">Cohort</Label>
@@ -144,7 +144,7 @@ export default function AttendancePage() {
         <p className="text-muted-foreground">No students in this cohort. Assign students from Staff.</p>
       ) : (
         <>
-          <div className="rounded-lg border bg-card">
+          <div className="overflow-hidden rounded-2xl border border-border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>

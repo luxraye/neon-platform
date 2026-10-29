@@ -211,7 +211,7 @@ export function AdminDashboard({
     <div className="space-y-6">
       <header className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-semibold">Command Center</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Command Center</h1>
           <p className="text-muted-foreground text-sm">Overview and institution management</p>
         </div>
         <div className="flex items-center gap-2">
@@ -312,7 +312,7 @@ export function AdminDashboard({
                     </TableCell>
                     <TableCell>
                       {inst.is_trial ? (
-                        <span className="text-amber-600 dark:text-amber-400">Trial</span>
+                        <span className="text-warning">Trial</span>
                       ) : (
                         <span className="text-muted-foreground">—</span>
                       )}

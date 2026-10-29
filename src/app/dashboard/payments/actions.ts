@@ -39,6 +39,28 @@ export async function recordCashPayment(formData: {
   return { success: true };
 }
 
+export type FeeSettings = { monthlyFee: number | null };
+
+export async function getFeeSettings(): Promise<FeeSettings> {
+  const actor = await getActor(["headmaster"]);
+  if (!actor?.institution_id) return { monthlyFee: null };
+  const { data } = await getDb().from("institutions").select("monthly_fee").eq("id", actor.institution_id).maybeSingle();
+  const fee = Number(data?.monthly_fee);
+  return { monthlyFee: Number.isFinite(fee) && fee > 0 ? fee : null };
+}
+
+export async function setMonthlyFee(amount: number | null): Promise<{ success: true } | { success: false; error: string }> {
+  const actor = await getActor(["headmaster"]);
+  if (!actor?.institution_id) return { success: false, error: "Only headmasters can set fees." };
+  const fee = amount === null ? null : Math.round(Number(amount) * 100) / 100;
+  if (fee !== null && (!Number.isFinite(fee) || fee <= 0 || fee > 1_000_000)) {
+    return { success: false, error: "Enter a fee above zero." };
+  }
+  const { error } = await getDb().from("institutions").update({ monthly_fee: fee }).eq("id", actor.institution_id);
+  if (error) return { success: false, error: error.message };
+  return { success: true };
+}
+
 export type SendFeeRemindersResult =
   | { success: true; notified: number }
   | { success: false; error: string };

@@ -339,6 +339,7 @@ export type AttemptDto = {
   quiz_id: string;
   quiz_title: string;
   student_id: string;
+  student_name: string | null;
   score: number | null;
   status: string;
   submitted_reason: string;
@@ -367,9 +368,12 @@ export async function qAttempts(): Promise<AttemptDto[]> {
     .in("quiz_id", quizIds);
   if (!isStaff(actor)) q = q.eq("student_id", actor.user.id);
   const { data } = await q.order("submitted_at", { ascending: false }).limit(300);
-  return ((data ?? []) as Omit<AttemptDto, "quiz_title">[]).map((a) => ({
+  const rows = (data ?? []) as Omit<AttemptDto, "quiz_title" | "student_name">[];
+  const names = isStaff(actor) ? await qPeopleNames(rows.map((r) => r.student_id)) : {};
+  return rows.map((a) => ({
     ...a,
     quiz_title: titles[a.quiz_id] ?? "Quiz",
+    student_name: isStaff(actor) ? names[a.student_id] ?? "Former student" : null,
   }));
 }
 

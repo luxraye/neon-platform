@@ -1,13 +1,11 @@
 "use client";
 
-import { useEffect, useState } from "react";
-import { usePathname } from "next/navigation";
-import { useQueryClient } from "@tanstack/react-query";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Check, Copy, GraduationCap, Inbox, Search, UserPlus, Users, X } from "lucide-react";
 import { useProfile } from "@/hooks/use-profile";
-import { useCohorts } from "@/hooks/use-cohorts";
-import { qPeople } from "@/app/data/queries";
-import { useQuery } from "@tanstack/react-query";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -18,552 +16,591 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
 } from "@/components/ui/dialog";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Badge, EmptyState, PageHeader, Panel } from "@/components/ui/page";
 import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-import { hireTutor, provisionStudent, assignStudentToCohort, getStaff, removeTutor, removeStudent } from "./actions";
+  approveJoinRequest,
+  assignStudentToCohort,
+  getStaff,
+  hireTutor,
+  listJoinRequests,
+  provisionStudent,
+  rejectJoinRequest,
+  removeStudent,
+  removeTutor,
+  type JoinRequestRow,
+} from "./actions";
 import { getCohorts } from "../cohorts/actions";
 
-type TutorProfile = {
-  id: string;
-  email: string;
-  full_name: string | null;
-  role: string;
-  deleted_at?: string | null;
-};
+type Tab = "students" | "tutors";
+type NewPersonKind = "student" | "tutor" | null;
 
-type StudentProfile = {
-  id: string;
-  email: string;
-  full_name: string | null;
-  role: string;
-  cohort_id: string | null;
-  deleted_at?: string | null;
-};
-
-function useTutors(institutionId: string | null) {
-  return useQuery({
-    queryKey: ["staff", "tutors", institutionId ?? ""],
-    queryFn: async (): Promise<TutorProfile[]> => qPeople("tutor", { includeRecentlyRemoved: true }),
-    enabled: !!institutionId,
-  });
+function initials(name: string | null, email: string) {
+  const src = (name || email).trim();
+  const parts = src.split(/[\s@.]+/).filter(Boolean);
+  return ((parts[0]?.[0] ?? "?") + (parts[1]?.[0] ?? "")).toUpperCase();
 }
 
-function useStudents(institutionId: string | null) {
-  return useQuery({
-    queryKey: ["staff", "students", institutionId ?? ""],
-    queryFn: async (): Promise<StudentProfile[]> => qPeople("student", { includeRecentlyRemoved: true }),
-    enabled: !!institutionId,
-  });
+function Avatar({ name, email }: { name: string | null; email: string }) {
+  return (
+    <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-secondary text-xs font-bold text-secondary-foreground">
+      {initials(name, email)}
+    </span>
+  );
 }
 
-const useStaffFromServer = (
-  enabled: boolean,
-  institutionId: string | null,
-  provisionedEmails: string[],
-  staffRefreshNonce: number
-) =>
-  useQuery({
-    queryKey: ["staff", "list", institutionId ?? "", staffRefreshNonce, provisionedEmails.join("|")],
-    queryFn: () => getStaff(institutionId ?? "", provisionedEmails),
-    // getStaff() uses service-role identity internally; it does not need client-side profile institution_id.
-    enabled,
-  });
+function since(iso: string) {
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 60) return `${Math.max(mins, 1)}m ago`;
+  const hrs = Math.round(mins / 60);
+  if (hrs < 48) return `${hrs}h ago`;
+  return `${Math.round(hrs / 24)}d ago`;
+}
+
+function suggestPassword() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789";
+  const bytes = new Uint32Array(12);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => chars[b % chars.length]).join("");
+}
 
 export default function StaffPage() {
-  const pathname = usePathname();
   const queryClient = useQueryClient();
-  const { data: profileData } = useProfile();
-  const institutionId = profileData?.profile?.institution_id ?? null;
-  const isHeadmasterRoute = pathname != null && pathname.startsWith("/headmaster");
-  const [provisionedEmails, setProvisionedEmails] = useState<string[]>([]);
-  const [staffRefreshNonce, setStaffRefreshNonce] = useState(0);
+  const { data: me } = useProfile();
+  const isHeadmaster = me?.profile?.role === "headmaster";
 
-  // For headmasters, use server-side cohorts so RLS doesn't hide options in the provisioning dropdown.
-  const { data: cohortsFromServer } = useQuery({
-    queryKey: ["staff", "cohorts", "server"],
-    queryFn: getCohorts,
-    enabled: !!isHeadmasterRoute,
+  const [tab, setTab] = useState<Tab>("students");
+  const [search, setSearch] = useState("");
+  const [cohortFilter, setCohortFilter] = useState("all");
+  const [newKind, setNewKind] = useState<NewPersonKind>(null);
+  const [busyId, setBusyId] = useState<string | null>(null);
+  const [approvedLink, setApprovedLink] = useState<{ email: string; link: string } | null>(null);
+
+  const staff = useQuery({ queryKey: ["staff", "list"], queryFn: () => getStaff() });
+  const cohortsQ = useQuery({ queryKey: ["staff", "cohorts"], queryFn: getCohorts });
+  const requestsQ = useQuery({
+    queryKey: ["staff", "requests"],
+    queryFn: listJoinRequests,
+    enabled: isHeadmaster,
   });
 
-  const clientCohortsQuery = useCohorts(institutionId);
-  const cohorts = isHeadmasterRoute ? cohortsFromServer : clientCohortsQuery.data;
+  const cohorts = useMemo(() => (cohortsQ.data ?? []) as { id: string; name: string }[], [cohortsQ.data]);
+  const cohortName = useMemo(() => Object.fromEntries(cohorts.map((c) => [c.id, c.name])), [cohorts]);
+  const students = staff.data?.students ?? [];
+  const tutors = staff.data?.tutors ?? [];
+  const requests = requestsQ.data ?? [];
 
-  const { data: staffPayload, isLoading: staffLoading, isError: staffIsError, error: staffError } = useStaffFromServer(
-    !!isHeadmasterRoute,
-    institutionId,
-    provisionedEmails,
-    staffRefreshNonce
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["staff"] });
+
+  const q = search.trim().toLowerCase();
+  const match = (p: { full_name: string | null; email: string }) =>
+    !q || (p.full_name ?? "").toLowerCase().includes(q) || p.email.toLowerCase().includes(q);
+
+  const visibleStudents = students.filter(
+    (s) =>
+      match(s) &&
+      (cohortFilter === "all" ||
+        (cohortFilter === "none" ? !s.cohort_id : s.cohort_id === cohortFilter))
   );
-  const clientTutors = useTutors(institutionId);
-  const clientStudents = useStudents(institutionId);
+  const visibleTutors = tutors.filter(match);
+  const activeStudents = students.filter((s) => !s.deleted_at).length;
+  const unassigned = students.filter((s) => !s.deleted_at && !s.cohort_id).length;
 
-  const tutors = isHeadmasterRoute ? (staffPayload?.tutors ?? null) : clientTutors.data ?? null;
-  const tutorsLoading = isHeadmasterRoute ? staffLoading : clientTutors.isLoading;
-  const tutorsError = isHeadmasterRoute ? staffIsError : clientTutors.isError;
-  const tutorsErr = isHeadmasterRoute ? staffError : clientTutors.error;
-  const students = isHeadmasterRoute ? (staffPayload?.students ?? null) : clientStudents.data ?? null;
-  const studentsLoading = isHeadmasterRoute ? staffLoading : clientStudents.isLoading;
-  const studentsError = isHeadmasterRoute ? staffIsError : clientStudents.isError;
-  const [dialogOpen, setDialogOpen] = useState(false);
-  const [studentDialogOpen, setStudentDialogOpen] = useState(false);
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [fullName, setFullName] = useState("");
-  const [studentEmail, setStudentEmail] = useState("");
-  const [studentPassword, setStudentPassword] = useState("");
-  const [studentFullName, setStudentFullName] = useState("");
-  const [studentCohortId, setStudentCohortId] = useState("");
-  const [submitting, setSubmitting] = useState(false);
-  const [studentSubmitting, setStudentSubmitting] = useState(false);
-  const [assigningId, setAssigningId] = useState<string | null>(null);
-  const [removingTutorId, setRemovingTutorId] = useState<string | null>(null);
-  const [removingStudentId, setRemovingStudentId] = useState<string | null>(null);
-
-  const isHeadmaster =
-    profileData?.profile?.role === "headmaster" || (pathname != null && pathname.startsWith("/headmaster"));
-  const unassignedStudents =
-    students?.filter((s) => !s.cohort_id && !s.deleted_at) ?? [];
-
-  const handleHire = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSubmitting(true);
-    const result = await hireTutor({ email, password, full_name: fullName });
-    setSubmitting(false);
-    if (result.success) {
-      toast.success("Tutor hired. They can sign in with the email and password you set.");
-      setProvisionedEmails([result.provisionedEmail]);
-      setStaffRefreshNonce((n) => n + 1);
-      setDialogOpen(false);
-      setEmail("");
-      setPassword("");
-      setFullName("");
-      // Also invalidate by prefix so any other staff queries update immediately.
-      queryClient.invalidateQueries({ queryKey: ["staff"] });
+  async function run<T extends { success: boolean }>(id: string, fn: () => Promise<T>, ok: string) {
+    setBusyId(id);
+    const res = await fn();
+    setBusyId(null);
+    if (res.success) {
+      toast.success(ok);
+      refresh();
     } else {
-      toast.error(result.error);
+      toast.error((res as unknown as { error: string }).error);
     }
-  };
+    return res;
+  }
 
-  const handleProvisionStudent = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setStudentSubmitting(true);
-    const result = await provisionStudent({
-      email: studentEmail,
-      password: studentPassword,
-      full_name: studentFullName || undefined,
-      cohort_id: studentCohortId === "none" ? undefined : studentCohortId || undefined,
-    });
-    setStudentSubmitting(false);
-    if (result.success) {
-      toast.success("Student account created. They can sign in with the email and password you set.");
-      setProvisionedEmails([result.provisionedEmail]);
-      setStaffRefreshNonce((n) => n + 1);
-      setStudentDialogOpen(false);
-      setStudentEmail("");
-      setStudentPassword("");
-      setStudentFullName("");
-      setStudentCohortId("");
-      queryClient.invalidateQueries({ queryKey: ["staff"] });
+  async function approve(r: JoinRequestRow, cohortId: string | null) {
+    setBusyId(r.id);
+    const res = await approveJoinRequest(r.id, cohortId);
+    setBusyId(null);
+    if (!res.success) {
+      toast.error(res.error);
+      return;
+    }
+    refresh();
+    if (res.emailed) {
+      toast.success(`${r.full_name || r.email} approved. We emailed them a link to set their password.`);
+    } else if (res.setupLink) {
+      setApprovedLink({ email: res.email, link: res.setupLink });
     } else {
-      toast.error(result.error);
+      toast.success(`${r.full_name || r.email} approved. They can use "Forgot password" on the sign-in page.`);
     }
-  };
-
-  const handleRemoveTutor = async (profileId: string) => {
-    if (!confirm("Remove this tutor? They can be restored by an admin within 72 hours.")) return;
-    setRemovingTutorId(profileId);
-    const result = await removeTutor(profileId);
-    setRemovingTutorId(null);
-    if (result.success) {
-      toast.success("Tutor marked for removal. Admin can restore within 72 hours.");
-      setStaffRefreshNonce((n) => n + 1);
-      queryClient.invalidateQueries({ queryKey: ["staff"] });
-    } else toast.error(result.error);
-  };
-
-  const handleRemoveStudent = async (profileId: string) => {
-    if (!confirm("Remove this student? They can be restored by an admin within 72 hours.")) return;
-    setRemovingStudentId(profileId);
-    const result = await removeStudent(profileId);
-    setRemovingStudentId(null);
-    if (result.success) {
-      toast.success("Student marked for removal. Admin can restore within 72 hours.");
-      setStaffRefreshNonce((n) => n + 1);
-      queryClient.invalidateQueries({ queryKey: ["staff"] });
-    } else toast.error(result.error);
-  };
-
-  const handleAssign = async (studentId: string, cohortId: string) => {
-    setAssigningId(studentId);
-    const result = await assignStudentToCohort(studentId, cohortId);
-    setAssigningId(null);
-    if (result.success) {
-      toast.success("Student assigned to cohort.");
-      setStaffRefreshNonce((n) => n + 1);
-      queryClient.invalidateQueries({ queryKey: ["staff"] });
-    } else {
-      toast.error(result.error);
-    }
-  };
+  }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Staff</h1>
-        {isHeadmasterRoute && (
-          <Button
-            variant="outline"
-            onClick={() => setStaffRefreshNonce((n) => n + 1)}
-          >
-            Refresh List
-          </Button>
-        )}
-        {isHeadmaster && (
-          <div className="flex gap-2">
-            <Dialog open={studentDialogOpen} onOpenChange={setStudentDialogOpen}>
-              <DialogTrigger asChild>
-                <Button variant="outline">Provision New Student</Button>
-              </DialogTrigger>
-              <DialogContent>
-                <DialogHeader>
-                  <DialogTitle>Provision New Student</DialogTitle>
-                  <DialogDescription>
-                    Create a student account for your institution. Optionally assign to a cohort now.
-                  </DialogDescription>
-                </DialogHeader>
-                <form onSubmit={handleProvisionStudent} className="space-y-4">
-                  <div className="space-y-2">
-                    <Label htmlFor="student-email">Email</Label>
-                    <Input
-                      id="student-email"
-                      type="email"
-                      value={studentEmail}
-                      onChange={(e) => setStudentEmail(e.target.value)}
-                      placeholder="student@example.com"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="student-password">Password</Label>
-                    <Input
-                      id="student-password"
-                      type="password"
-                      value={studentPassword}
-                      onChange={(e) => setStudentPassword(e.target.value)}
-                      placeholder="••••••••"
-                      required
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label htmlFor="student-name">Full name (optional)</Label>
-                    <Input
-                      id="student-name"
-                      value={studentFullName}
-                      onChange={(e) => setStudentFullName(e.target.value)}
-                      placeholder="Student Name"
-                    />
-                  </div>
-                  <div className="space-y-2">
-                    <Label>Cohort (optional)</Label>
-                    <Select value={studentCohortId} onValueChange={setStudentCohortId}>
-                      <SelectTrigger>
-                        <SelectValue placeholder="Assign to cohort later" />
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value="none">None yet</SelectItem>
-                        {cohorts?.map((c) => (
-                          <SelectItem key={c.id} value={c.id}>
-                            {c.name}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </div>
-                  <DialogFooter>
-                    <Button type="button" variant="outline" onClick={() => setStudentDialogOpen(false)}>
-                      Cancel
-                    </Button>
-                    <Button type="submit" disabled={studentSubmitting}>
-                      {studentSubmitting ? "Creating…" : "Provision Student"}
-                    </Button>
-                  </DialogFooter>
-                </form>
-              </DialogContent>
-            </Dialog>
-            <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
-              <DialogTrigger asChild>
-                <Button>Provision New Tutor</Button>
-              </DialogTrigger>
-            <DialogContent>
-              <DialogHeader>
-                <DialogTitle>Provision New Tutor</DialogTitle>
-                <DialogDescription>
-                  Create a tutor account for your institution. They will sign in with the email and password you set and see Materials, Quizzes, Attendance, and Community.
-                </DialogDescription>
-              </DialogHeader>
-              <form onSubmit={handleHire} className="space-y-4">
-                <div className="space-y-2">
-                  <Label htmlFor="tutor-email">Email</Label>
-                  <Input
-                    id="tutor-email"
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    placeholder="tutor@example.com"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="tutor-password">Password</Label>
-                  <Input
-                    id="tutor-password"
-                    type="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    placeholder="••••••••"
-                    required
-                  />
-                </div>
-                <div className="space-y-2">
-                  <Label htmlFor="tutor-name">Full name (optional)</Label>
-                  <Input
-                    id="tutor-name"
-                    value={fullName}
-                    onChange={(e) => setFullName(e.target.value)}
-                    placeholder="Jane Doe"
-                  />
-                </div>
-                <DialogFooter>
-                  <Button
-                    type="button"
-                    variant="outline"
-                    onClick={() => setDialogOpen(false)}
-                  >
-                    Cancel
-                  </Button>
-                    <Button type="submit" disabled={submitting}>
-                    {submitting ? "Creating…" : "Provision Tutor"}
-                  </Button>
-                </DialogFooter>
-              </form>
-            </DialogContent>
-          </Dialog>
-          </div>
-        )}
+    <div className="space-y-6">
+      <PageHeader
+        title="People"
+        description={
+          isHeadmaster
+            ? "Approve new students, add tutors and keep everyone in the right cohort."
+            : "Everyone at your centre."
+        }
+        actions={
+          isHeadmaster ? (
+            <>
+              <Button variant="outline" onClick={() => setNewKind("tutor")}>
+                <GraduationCap /> Add tutor
+              </Button>
+              <Button onClick={() => setNewKind("student")}>
+                <UserPlus /> Add student
+              </Button>
+            </>
+          ) : null
+        }
+      />
+
+      {isHeadmaster && requests.length > 0 ? (
+        <Panel
+          title={
+            <span id="requests" className="flex items-center gap-2 scroll-mt-24">
+              <Inbox className="size-4 text-primary" /> Waiting for approval
+              <Badge tone="primary">{requests.length}</Badge>
+            </span>
+          }
+        >
+          <ul className="-my-2 divide-y divide-border">
+            {requests.map((r) => (
+              <JoinRequestItem
+                key={r.id}
+                request={r}
+                cohorts={cohorts}
+                busy={busyId === r.id}
+                onApprove={(cohortId) => approve(r, cohortId)}
+                onReject={() => {
+                  if (!confirm(`Decline ${r.full_name || r.email}?`)) return;
+                  void run(r.id, () => rejectJoinRequest(r.id), "Request declined.");
+                }}
+              />
+            ))}
+          </ul>
+        </Panel>
+      ) : null}
+
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="inline-flex rounded-xl border border-border bg-card p-1" role="tablist">
+          {(
+            [
+              ["students", `Students · ${activeStudents}`],
+              ["tutors", `Tutors · ${tutors.filter((t) => !t.deleted_at).length}`],
+            ] as const
+          ).map(([key, label]) => (
+            <button
+              key={key}
+              role="tab"
+              aria-selected={tab === key}
+              onClick={() => setTab(key)}
+              className={cn(
+                "rounded-lg px-4 py-1.5 text-sm font-semibold transition-colors",
+                tab === key ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+              )}
+            >
+              {label}
+            </button>
+          ))}
+        </div>
+        <div className="relative flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name or email"
+            className="pl-9"
+            aria-label="Search people"
+          />
+        </div>
+        {tab === "students" ? (
+          <Select value={cohortFilter} onValueChange={setCohortFilter}>
+            <SelectTrigger className="sm:w-52" aria-label="Filter by cohort">
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All cohorts</SelectItem>
+              <SelectItem value="none">Needs a cohort{unassigned ? ` (${unassigned})` : ""}</SelectItem>
+              {cohorts.map((c) => (
+                <SelectItem key={c.id} value={c.id}>
+                  {c.name}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        ) : null}
       </div>
 
-      {/* Tutors */}
-      <section className="mb-8">
-        <h2 className="text-lg font-medium mb-3">Tutors</h2>
-        {tutorsLoading && <p className="text-muted-foreground">Loading…</p>}
-        {tutorsError && (
-          <p className="text-destructive">Error: {tutorsErr?.message}</p>
-        )}
-        {!tutorsLoading && !tutorsError && (
-          <div className="rounded-lg border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  {isHeadmaster && <TableHead className="w-24">Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {!tutors?.length ? (
-                  <TableRow>
-                    <TableCell colSpan={isHeadmaster ? 3 : 2} className="text-center text-muted-foreground py-6">
-                      No tutors yet. {isHeadmaster ? "Use Hire Tutor to add one." : ""}
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  tutors.map((t) => {
-                    const isRemoved = !!(t as { deleted_at?: string | null }).deleted_at;
-                    return (
-                      <TableRow
-                        key={t.id}
-                        className={isRemoved ? "opacity-60 bg-muted/30" : undefined}
-                      >
-                        <TableCell className="font-medium">{t.full_name ?? "—"}</TableCell>
-                        <TableCell className="text-muted-foreground">{t.email}</TableCell>
-                        {isHeadmaster && (
-                          <TableCell>
-                            {isRemoved ? (
-                              <span className="text-xs text-muted-foreground">Removed — admin can restore within 72h</span>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-destructive hover:text-destructive"
-                                disabled={removingTutorId === t.id}
-                                onClick={() => handleRemoveTutor(t.id)}
-                              >
-                                {removingTutorId === t.id ? "…" : "Remove"}
-                              </Button>
-                            )}
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </section>
-
-      {/* New Students (Pending Assignment) */}
-      {isHeadmaster && unassignedStudents.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-medium mb-3">New Students (Pending Assignment)</h2>
-          <p className="text-sm text-muted-foreground mb-3">
-            Assign these students to a cohort so they can access materials and quizzes.
-          </p>
-          <div className="rounded-lg border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead className="w-48">Assign to cohort</TableHead>
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {unassignedStudents.map((s) => (
-                  <TableRow key={s.id}>
-                    <TableCell className="font-medium">{s.full_name ?? "—"}</TableCell>
-                    <TableCell className="text-muted-foreground">{s.email}</TableCell>
-                    <TableCell>
+      {staff.isLoading ? (
+        <div className="space-y-2">
+          {Array.from({ length: 4 }).map((_, i) => (
+            <div key={i} className="h-16 animate-pulse rounded-2xl bg-muted" />
+          ))}
+        </div>
+      ) : staff.isError ? (
+        <EmptyState title="Couldn't load people" body="Check your connection and try again." action={<Button onClick={refresh}>Retry</Button>} />
+      ) : tab === "students" ? (
+        visibleStudents.length === 0 ? (
+          <EmptyState
+            icon={Users}
+            title={students.length ? "No one matches" : "No students yet"}
+            body={
+              students.length
+                ? "Try a different name or cohort."
+                : "Share your join link from the overview page, or add a student yourself."
+            }
+          />
+        ) : (
+          <ul className="overflow-hidden rounded-2xl border border-border bg-card divide-y divide-border">
+            {visibleStudents.map((s) => {
+              const removed = !!s.deleted_at;
+              return (
+                <li key={s.id} className={cn("flex flex-wrap items-center gap-3 px-4 py-3 sm:flex-nowrap", removed && "opacity-60")}>
+                  <Avatar name={s.full_name} email={s.email} />
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate font-semibold">{s.full_name || s.email}</p>
+                    <p className="truncate text-xs text-muted-foreground">{s.email}</p>
+                  </div>
+                  {removed ? (
+                    <Badge tone="danger">Removed · restorable for 72h</Badge>
+                  ) : isHeadmaster ? (
+                    <>
                       <Select
-                        onValueChange={(cohortId) => handleAssign(s.id, cohortId)}
-                        disabled={assigningId === s.id}
+                        value={s.cohort_id ?? ""}
+                        onValueChange={(cohortId) =>
+                          run(s.id, () => assignStudentToCohort(s.id, cohortId), "Cohort updated.")
+                        }
+                        disabled={busyId === s.id}
                       >
-                        <SelectTrigger className="w-full">
-                          <SelectValue placeholder="Choose cohort" />
+                        <SelectTrigger
+                          className={cn("w-full sm:w-48", !s.cohort_id && "border-warning/50 text-warning")}
+                          aria-label={`Cohort for ${s.full_name || s.email}`}
+                        >
+                          <SelectValue placeholder="Needs a cohort" />
                         </SelectTrigger>
                         <SelectContent>
-                          {cohorts?.map((c) => (
+                          {cohorts.map((c) => (
                             <SelectItem key={c.id} value={c.id}>
                               {c.name}
                             </SelectItem>
                           ))}
                         </SelectContent>
                       </Select>
-                    </TableCell>
-                  </TableRow>
-                ))}
-              </TableBody>
-            </Table>
-          </div>
-        </section>
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="text-muted-foreground hover:text-destructive"
+                        disabled={busyId === s.id}
+                        onClick={() => {
+                          if (!confirm(`Remove ${s.full_name || s.email}? An admin can restore them within 72 hours.`)) return;
+                          void run(s.id, () => removeStudent(s.id), "Student removed.");
+                        }}
+                      >
+                        Remove
+                      </Button>
+                    </>
+                  ) : s.cohort_id ? (
+                    <Badge>{cohortName[s.cohort_id] ?? "Cohort"}</Badge>
+                  ) : (
+                    <Badge tone="warning">Needs a cohort</Badge>
+                  )}
+                </li>
+              );
+            })}
+          </ul>
+        )
+      ) : visibleTutors.length === 0 ? (
+        <EmptyState
+          icon={GraduationCap}
+          title={tutors.length ? "No one matches" : "No tutors yet"}
+          body={tutors.length ? "Try a different name." : "Add your first tutor so they can post materials and run quizzes."}
+          action={
+            isHeadmaster && !tutors.length ? (
+              <Button onClick={() => setNewKind("tutor")}>
+                <GraduationCap /> Add tutor
+              </Button>
+            ) : null
+          }
+        />
+      ) : (
+        <ul className="overflow-hidden rounded-2xl border border-border bg-card divide-y divide-border">
+          {visibleTutors.map((t) => {
+            const removed = !!t.deleted_at;
+            return (
+              <li key={t.id} className={cn("flex items-center gap-3 px-4 py-3", removed && "opacity-60")}>
+                <Avatar name={t.full_name} email={t.email} />
+                <div className="min-w-0 flex-1">
+                  <p className="truncate font-semibold">{t.full_name || t.email}</p>
+                  <p className="truncate text-xs text-muted-foreground">{t.email}</p>
+                </div>
+                {removed ? (
+                  <Badge tone="danger">Removed · restorable for 72h</Badge>
+                ) : isHeadmaster ? (
+                  <Button
+                    variant="ghost"
+                    size="sm"
+                    className="text-muted-foreground hover:text-destructive"
+                    disabled={busyId === t.id}
+                    onClick={() => {
+                      if (!confirm(`Remove ${t.full_name || t.email}? An admin can restore them within 72 hours.`)) return;
+                      void run(t.id, () => removeTutor(t.id), "Tutor removed.");
+                    }}
+                  >
+                    Remove
+                  </Button>
+                ) : (
+                  <Badge tone="primary">Tutor</Badge>
+                )}
+              </li>
+            );
+          })}
+        </ul>
       )}
 
-      {/* Students */}
-      <section>
-        <h2 className="text-lg font-medium mb-3">Students</h2>
-        {studentsLoading && <p className="text-muted-foreground">Loading…</p>}
-        {studentsError && <p className="text-destructive">Error loading students.</p>}
-        {!studentsLoading && !studentsError && (
-          <div className="rounded-lg border bg-card">
-            <Table>
-              <TableHeader>
-                <TableRow>
-                  <TableHead>Name</TableHead>
-                  <TableHead>Email</TableHead>
-                  <TableHead>Cohort</TableHead>
-                  {isHeadmaster && <TableHead className="w-48">Assign</TableHead>}
-                  {isHeadmaster && <TableHead className="w-24">Actions</TableHead>}
-                </TableRow>
-              </TableHeader>
-              <TableBody>
-                {!students?.length ? (
-                  <TableRow>
-                    <TableCell colSpan={isHeadmaster ? 5 : 3} className="text-center text-muted-foreground py-6">
-                      No students yet. Share your join link: /join/[subdomain]
-                    </TableCell>
-                  </TableRow>
-                ) : (
-                  students.map((s) => {
-                    const isRemoved = !!(s as { deleted_at?: string | null }).deleted_at;
-                    return (
-                      <TableRow
-                        key={s.id}
-                        className={isRemoved ? "opacity-60 bg-muted/30" : undefined}
-                      >
-                        <TableCell className="font-medium">{s.full_name ?? "—"}</TableCell>
-                        <TableCell className="text-muted-foreground">{s.email}</TableCell>
-                        <TableCell>
-                          {cohorts?.find((c) => c.id === s.cohort_id)?.name ?? (
-                            <span className="text-amber-600 dark:text-amber-400">Unassigned</span>
-                          )}
-                        </TableCell>
-                        {isHeadmaster && (
-                          <TableCell>
-                            {isRemoved ? (
-                              "—"
-                            ) : !s.cohort_id ? (
-                              <Select
-                                onValueChange={(cohortId) => handleAssign(s.id, cohortId)}
-                                disabled={assigningId === s.id}
-                              >
-                                <SelectTrigger className="w-full">
-                                  <SelectValue placeholder="Assign cohort" />
-                                </SelectTrigger>
-                                <SelectContent>
-                                  {cohorts?.map((c) => (
-                                    <SelectItem key={c.id} value={c.id}>
-                                      {c.name}
-                                    </SelectItem>
-                                  ))}
-                                </SelectContent>
-                              </Select>
-                            ) : (
-                              "—"
-                            )}
-                          </TableCell>
-                        )}
-                        {isHeadmaster && (
-                          <TableCell>
-                            {isRemoved ? (
-                              <span className="text-xs text-muted-foreground">Removed — admin can restore within 72h</span>
-                            ) : (
-                              <Button
-                                variant="outline"
-                                size="sm"
-                                className="text-destructive hover:text-destructive"
-                                disabled={removingStudentId === s.id}
-                                onClick={() => handleRemoveStudent(s.id)}
-                              >
-                                {removingStudentId === s.id ? "…" : "Remove"}
-                              </Button>
-                            )}
-                          </TableCell>
-                        )}
-                      </TableRow>
-                    );
-                  })
-                )}
-              </TableBody>
-            </Table>
-          </div>
-        )}
-      </section>
+      <NewPersonDialog
+        kind={newKind}
+        cohorts={cohorts}
+        onClose={() => setNewKind(null)}
+        onCreated={() => {
+          setNewKind(null);
+          refresh();
+        }}
+      />
+
+      <Dialog open={!!approvedLink} onOpenChange={(o) => !o && setApprovedLink(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Student approved</DialogTitle>
+            <DialogDescription>
+              We couldn&apos;t email {approvedLink?.email}. Send them this link on WhatsApp so they can choose a
+              password. It works once.
+            </DialogDescription>
+          </DialogHeader>
+          {approvedLink ? <CopyField value={approvedLink.link} /> : null}
+          <DialogFooter>
+            <Button onClick={() => setApprovedLink(null)}>Done</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </div>
+  );
+}
+
+function CopyField({ value }: { value: string }) {
+  const [copied, setCopied] = useState(false);
+  return (
+    <div className="flex items-center gap-2">
+      <code className="min-w-0 flex-1 truncate rounded-lg bg-muted px-3 py-2 text-xs">{value}</code>
+      <Button
+        type="button"
+        variant="outline"
+        size="sm"
+        onClick={async () => {
+          try {
+            await navigator.clipboard.writeText(value);
+            setCopied(true);
+            setTimeout(() => setCopied(false), 2000);
+          } catch {
+            // Clipboard blocked; the value is still visible.
+          }
+        }}
+      >
+        {copied ? <Check /> : <Copy />} {copied ? "Copied" : "Copy"}
+      </Button>
+    </div>
+  );
+}
+
+function JoinRequestItem({
+  request,
+  cohorts,
+  busy,
+  onApprove,
+  onReject,
+}: {
+  request: JoinRequestRow;
+  cohorts: { id: string; name: string }[];
+  busy: boolean;
+  onApprove: (cohortId: string | null) => void;
+  onReject: () => void;
+}) {
+  const [cohortId, setCohortId] = useState("none");
+  return (
+    <li className="flex flex-col gap-3 py-3 sm:flex-row sm:items-center">
+      <div className="flex min-w-0 flex-1 items-center gap-3">
+        <Avatar name={request.full_name} email={request.email} />
+        <div className="min-w-0">
+          <p className="truncate font-semibold">
+            {request.full_name || request.email}{" "}
+            <span className="font-normal text-xs text-muted-foreground">· {since(request.created_at)}</span>
+          </p>
+          <p className="truncate text-xs text-muted-foreground">{request.email}</p>
+          {request.message ? <p className="mt-1 line-clamp-2 text-sm">&ldquo;{request.message}&rdquo;</p> : null}
+        </div>
+      </div>
+      <div className="flex items-center gap-2">
+        <Select value={cohortId} onValueChange={setCohortId}>
+          <SelectTrigger className="w-full sm:w-44" aria-label="Cohort">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="none">Pick cohort later</SelectItem>
+            {cohorts.map((c) => (
+              <SelectItem key={c.id} value={c.id}>
+                {c.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        <Button size="sm" disabled={busy} onClick={() => onApprove(cohortId === "none" ? null : cohortId)}>
+          <Check /> Approve
+        </Button>
+        <Button size="sm" variant="ghost" disabled={busy} onClick={onReject} aria-label="Decline">
+          <X />
+        </Button>
+      </div>
+    </li>
+  );
+}
+
+function NewPersonDialog({
+  kind,
+  cohorts,
+  onClose,
+  onCreated,
+}: {
+  kind: NewPersonKind;
+  cohorts: { id: string; name: string }[];
+  onClose: () => void;
+  onCreated: () => void;
+}) {
+  const [email, setEmail] = useState("");
+  const [fullName, setFullName] = useState("");
+  const [password, setPassword] = useState("");
+  const [cohortId, setCohortId] = useState("none");
+  const [submitting, setSubmitting] = useState(false);
+
+  const reset = () => {
+    setEmail("");
+    setFullName("");
+    setPassword("");
+    setCohortId("none");
+  };
+
+  async function submit(e: React.FormEvent) {
+    e.preventDefault();
+    setSubmitting(true);
+    const res =
+      kind === "tutor"
+        ? await hireTutor({ email, password, full_name: fullName || undefined })
+        : await provisionStudent({
+            email,
+            password,
+            full_name: fullName || undefined,
+            cohort_id: cohortId === "none" ? undefined : cohortId,
+          });
+    setSubmitting(false);
+    if (!res.success) {
+      toast.error(res.error);
+      return;
+    }
+    toast.success(`${kind === "tutor" ? "Tutor" : "Student"} added. Share the email and password with them.`);
+    reset();
+    onCreated();
+  }
+
+  return (
+    <Dialog
+      open={!!kind}
+      onOpenChange={(o) => {
+        if (!o) {
+          reset();
+          onClose();
+        }
+      }}
+    >
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>{kind === "tutor" ? "Add a tutor" : "Add a student"}</DialogTitle>
+          <DialogDescription>
+            {kind === "tutor"
+              ? "Tutors can post materials, run quizzes, mark attendance and talk to students."
+              : "For students who can't use the join link. They'll sign in with the details you set here."}
+          </DialogDescription>
+        </DialogHeader>
+        <form onSubmit={submit} className="space-y-4">
+          <div className="space-y-2">
+            <Label htmlFor="np-name">Full name</Label>
+            <Input id="np-name" value={fullName} onChange={(e) => setFullName(e.target.value)} placeholder="Kagiso Molefe" />
+          </div>
+          <div className="space-y-2">
+            <Label htmlFor="np-email">Email</Label>
+            <Input
+              id="np-email"
+              type="email"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              placeholder="name@example.com"
+              required
+            />
+          </div>
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label htmlFor="np-password">Starting password</Label>
+              <button
+                type="button"
+                className="text-xs font-semibold text-primary hover:underline"
+                onClick={() => setPassword(suggestPassword())}
+              >
+                Suggest one
+              </button>
+            </div>
+            <Input
+              id="np-password"
+              type="text"
+              autoComplete="off"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              placeholder="At least 8 characters"
+              minLength={8}
+              required
+            />
+          </div>
+          {kind === "student" ? (
+            <div className="space-y-2">
+              <Label>Cohort</Label>
+              <Select value={cohortId} onValueChange={setCohortId}>
+                <SelectTrigger>
+                  <SelectValue />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="none">Pick later</SelectItem>
+                  {cohorts.map((c) => (
+                    <SelectItem key={c.id} value={c.id}>
+                      {c.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+          <DialogFooter>
+            <Button type="button" variant="outline" onClick={onClose}>
+              Cancel
+            </Button>
+            <Button type="submit" disabled={submitting}>
+              {submitting ? "Adding…" : kind === "tutor" ? "Add tutor" : "Add student"}
+            </Button>
+          </DialogFooter>
+        </form>
+      </DialogContent>
+    </Dialog>
   );
 }

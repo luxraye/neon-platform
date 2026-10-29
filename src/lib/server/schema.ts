@@ -43,6 +43,7 @@ export const COLLECTION_DEFAULTS: Record<CollectionName, Defaults> = {
     is_trial: false,
     trial_ends_at: null,
     join_mode: "approval",
+    monthly_fee: null,
   },
   profiles: {
     institution_id: null,

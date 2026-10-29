@@ -30,7 +30,7 @@ export default function ProfileSettingsPage() {
   return (
     <div className="space-y-6 max-w-lg">
       <div>
-        <h1 className="text-2xl font-semibold mb-1">Account</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-1">Account</h1>
         <p className="text-muted-foreground text-sm">Update your personal details and password.</p>
       </div>
 

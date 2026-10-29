@@ -243,7 +243,7 @@ export default function SubjectsPage() {
     <div>
       <div className="flex items-center justify-between mb-6 gap-3 flex-wrap">
         <div>
-          <h1 className="text-2xl font-semibold">Subjects</h1>
+          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Subjects</h1>
           <p className="text-sm text-muted-foreground mt-1 max-w-2xl">
             Create subject areas, then add documents (PDF, Word, PowerPoint, or images) with optional descriptions.
           </p>
@@ -299,7 +299,7 @@ export default function SubjectsPage() {
           {docsError && <p className="text-destructive">Error: {docsError}</p>}
 
           {!docsLoading && !docsError && (
-            <div className="rounded-lg border bg-card">
+            <div className="overflow-hidden rounded-2xl border border-border bg-card">
               <Table>
                 <TableHeader>
                   <TableRow>
@@ -477,7 +477,7 @@ export default function SubjectsPage() {
       ) : (
         <>
           <div className="flex items-center justify-between mb-4 gap-3 flex-wrap">
-            <h2 className="text-lg font-medium">Announcements</h2>
+            <h2 className="text-base font-bold">Announcements</h2>
             {canManage && activeSubjectResolved && (
               <Dialog open={announcementDialogOpen} onOpenChange={setAnnouncementDialogOpen}>
                 <DialogTrigger asChild>
@@ -526,7 +526,7 @@ export default function SubjectsPage() {
             <div className="space-y-3">
               {announcements?.length ? (
                 announcements.map((p) => (
-                  <div key={p.id} className="rounded-lg border bg-card p-4">
+                  <div key={p.id} className="overflow-hidden rounded-2xl border border-border bg-card p-4">
                     <div className="flex items-center justify-between gap-3 flex-wrap">
                       <div>
                         <div className="font-medium">{p.title}</div>

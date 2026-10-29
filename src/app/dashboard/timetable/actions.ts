@@ -1,7 +1,7 @@
 "use server";
 
 import { getActor } from "@/lib/auth/identity";
-import { cohortBelongsTo } from "@/lib/server/guards";
+import { cohortBelongsTo, profileBelongsTo } from "@/lib/server/guards";
 import { getDb } from "@/lib/server/db";
 
 export type TimetableSlot = {
@@ -27,6 +27,7 @@ export async function createTimetableSlot(form: {
   end_time: string;
   subject: string;
   room?: string;
+  tutor_id?: string | null;
 }): Promise<CreateSlotResult> {
   const actor = await getActor(["headmaster", "tutor"]);
   if (!actor?.institution_id) return { success: false, error: "Only staff can add timetable slots." };
@@ -41,6 +42,15 @@ export async function createTimetableSlot(form: {
     return { success: false, error: "Choose a cohort from your centre." };
   }
 
+  // Headmasters can put any of their tutors on a slot; tutors always book themselves.
+  let tutorId = actor.user.id;
+  if (actor.role === "headmaster" && form.tutor_id) {
+    if (!(await profileBelongsTo(form.tutor_id, actor.institution_id, "tutor"))) {
+      return { success: false, error: "Choose a tutor from your centre." };
+    }
+    tutorId = form.tutor_id;
+  }
+
   const admin = getDb();
 
   const { data: row, error } = await admin
@@ -52,7 +62,7 @@ export async function createTimetableSlot(form: {
       start_time: form.start_time,
       end_time: form.end_time,
       subject: form.subject.trim(),
-      tutor_id: actor.user.id,
+      tutor_id: tutorId,
       room: form.room?.trim() || null,
     })
     .select("id")

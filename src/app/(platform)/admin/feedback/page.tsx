@@ -53,7 +53,7 @@ export default async function AdminFeedbackPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">User feedback</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">User feedback</h1>
         <p className="text-muted-foreground text-sm">
           Review user challenges and recommendations from all role dashboards.
         </p>

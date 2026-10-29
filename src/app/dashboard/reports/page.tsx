@@ -75,7 +75,7 @@ export default function ReportsPage() {
 
   return (
     <div>
-      <h1 className="text-2xl font-semibold mb-4">Performance Report</h1>
+      <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-4">Performance Report</h1>
 
       <div className="flex flex-wrap gap-4 mb-6 print:hidden">
         {isHeadmaster && (
@@ -128,8 +128,8 @@ export default function ReportsPage() {
       )}
       {effectiveStudentId && isLoading && <p className="text-muted-foreground">Loading report…</p>}
       {effectiveStudentId && !isLoading && report && (
-        <div id="report-print-area" className="rounded-lg border bg-card p-6 print:border-0 print:shadow-none">
-          <h2 className="text-lg font-semibold mb-4">Performance Report</h2>
+        <div id="report-print-area" className="overflow-hidden rounded-2xl border border-border bg-card p-6 print:border-0 print:shadow-none">
+          <h2 className="text-base font-bold mb-4">Performance Report</h2>
           <p className="text-sm text-muted-foreground mb-4">
             {startDate} – {endDate}
           </p>

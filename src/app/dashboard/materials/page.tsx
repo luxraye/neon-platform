@@ -104,7 +104,7 @@ export default function MaterialsPage() {
   return (
     <div>
       <div className="flex items-center justify-between mb-6">
-        <h1 className="text-2xl font-semibold">Materials</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Materials</h1>
         {canManage && (
           <Dialog open={dialogOpen} onOpenChange={setDialogOpen}>
             <DialogTrigger asChild>
@@ -194,7 +194,7 @@ export default function MaterialsPage() {
         <p className="text-destructive">Error: {error?.message}</p>
       )}
       {!isLoading && !isError && (
-        <div className="rounded-lg border bg-card">
+        <div className="overflow-hidden rounded-2xl border border-border bg-card">
           <Table>
             <TableHeader>
               <TableRow>

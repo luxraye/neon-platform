@@ -203,7 +203,7 @@ export function AdminCommandCenter({
   return (
     <div className="min-h-screen p-6">
       <header className="flex items-center justify-between border-b pb-4 mb-6">
-        <h1 className="text-2xl font-semibold">Admin Command Center</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Admin Command Center</h1>
         <div className="flex items-center gap-2">
           <ThemeToggle className="w-auto" />
           <LogoutButton />
@@ -336,9 +336,9 @@ export function AdminCommandCenter({
             </Button>
           </div>
 
-          <div className="rounded-lg border bg-card">
+          <div className="overflow-hidden rounded-2xl border border-border bg-card">
             <div className="p-4">
-              <h2 className="text-lg font-medium">Institutions</h2>
+              <h2 className="text-base font-bold">Institutions</h2>
             </div>
             <Table>
               <TableHeader>
@@ -383,7 +383,7 @@ export function AdminCommandCenter({
                       </TableCell>
                       <TableCell>
                         {inst.is_trial ? (
-                          <span className="text-amber-600 dark:text-amber-400">Trial</span>
+                          <span className="text-warning">Trial</span>
                         ) : (
                           <span className="text-muted-foreground">—</span>
                         )}
@@ -414,8 +414,8 @@ export function AdminCommandCenter({
 
       {tab === "leads" && (
         <div className="space-y-4">
-          <h2 className="text-lg font-medium">Leads (contact form inbox)</h2>
-          <div className="rounded-lg border bg-card">
+          <h2 className="text-base font-bold">Leads (contact form inbox)</h2>
+          <div className="overflow-hidden rounded-2xl border border-border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -469,12 +469,12 @@ export function AdminCommandCenter({
       {tab === "billing" && (
         <div className="space-y-6">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-medium">Billing (Base tier + ${PER_STUDENT_FEE}/student)</h2>
+            <h2 className="text-base font-bold">Billing (Base tier + ${PER_STUDENT_FEE}/student)</h2>
             <Button onClick={handleGenerateReport} disabled={reportLoading}>
               {reportLoading ? "Generating…" : "Generate monthly report"}
             </Button>
           </div>
-          <div className="rounded-lg border bg-card">
+          <div className="overflow-hidden rounded-2xl border border-border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>
@@ -514,8 +514,8 @@ export function AdminCommandCenter({
             </Table>
           </div>
 
-          <h2 className="text-lg font-medium">Recent reports</h2>
-          <div className="rounded-lg border bg-card">
+          <h2 className="text-base font-bold">Recent reports</h2>
+          <div className="overflow-hidden rounded-2xl border border-border bg-card">
             <Table>
               <TableHeader>
                 <TableRow>

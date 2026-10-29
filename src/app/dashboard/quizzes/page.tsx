@@ -2,124 +2,100 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { useQuery } from "@tanstack/react-query";
+import { BarChart3, CalendarClock, ClipboardList, HelpCircle, Plus, Timer } from "lucide-react";
 import { useStaffRole } from "@/hooks/use-staff-role";
-import { useProfile } from "@/hooks/use-profile";
 import { useCohorts } from "@/hooks/use-cohorts";
 import { qQuizzes } from "@/app/data/queries";
-import { useQuery } from "@tanstack/react-query";
+import { roleRoot } from "@/lib/role-root";
 import { Button } from "@/components/ui/button";
-import {
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableHeader,
-  TableRow,
-} from "@/components/ui/table";
-
-type Quiz = {
-  id: string;
-  title: string;
-  cohort_id: string | null;
-  time_limit_minutes: number;
-  max_focus_violations: number;
-  created_at: string;
-};
-
-function useQuizzes(institutionId: string | null) {
-  return useQuery({
-    queryKey: ["quizzes", institutionId ?? ""],
-    queryFn: (): Promise<Quiz[]> => qQuizzes(),
-    enabled: !!institutionId,
-  });
-}
+import { Badge, EmptyState, PageHeader } from "@/components/ui/page";
 
 export default function QuizzesPage() {
-  const pathname = usePathname() ?? "";
-  const { data: profileData } = useProfile();
-  const { isStaff: canManage, role } = useStaffRole();
-  const institutionId =
-    profileData?.profile?.institution_id ??
-    null;
+  const pathname = usePathname();
+  const { isStaff, role, profileData } = useStaffRole();
+  const institutionId = profileData?.profile?.institution_id ?? null;
   const { data: cohorts } = useCohorts(institutionId);
-  const { data: quizzes, isLoading, isError, error } = useQuizzes(institutionId);
-
-  const newQuizHref =
-    role === "tutor" || pathname.startsWith("/tutor")
-      ? "/tutor/quizzes/new"
-      : "/dashboard/quizzes/new";
+  const { data: quizzes, isLoading } = useQuery({
+    queryKey: ["quizzes", institutionId ?? ""],
+    queryFn: () => qQuizzes(),
+    enabled: !!institutionId,
+  });
+  const root = roleRoot(role, pathname);
+  const cohortName = (id: string | null) => (id ? cohorts?.find((c) => c.id === id)?.name ?? "Cohort" : "All cohorts");
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6 gap-4 flex-wrap">
-        <div>
-          <h1 className="text-2xl font-semibold">Quizzes</h1>
-          <p className="text-sm text-muted-foreground mt-1">
-            Multiple choice only. Each quiz uses a countdown timer (set the limit when you create it).
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button asChild variant="outline">
-            <Link href="/dashboard/results">Results</Link>
-          </Button>
-          {canManage && (
-            <Button asChild>
-              <Link href={newQuizHref}>Create quiz</Link>
+    <div className="space-y-6">
+      <PageHeader
+        title="Quizzes"
+        description="Timed multiple-choice quizzes. Answers are checked on the server, so students can't peek."
+        actions={
+          <>
+            <Button asChild variant="outline">
+              <Link href={`${root}/results`}>
+                <BarChart3 /> Results
+              </Link>
             </Button>
-          )}
-        </div>
-      </div>
+            {isStaff ? (
+              <Button asChild>
+                <Link href={`${root}/quizzes/new`}>
+                  <Plus /> New quiz
+                </Link>
+              </Button>
+            ) : null}
+          </>
+        }
+      />
 
-      {isLoading && <p className="text-muted-foreground">Loading quizzes…</p>}
-      {isError && (
-        <p className="text-destructive">Error: {error?.message}</p>
-      )}
-      {!isLoading && !isError && (
-        <div className="rounded-lg border bg-card">
-          <Table>
-            <TableHeader>
-              <TableRow>
-                <TableHead>Title</TableHead>
-                <TableHead>Cohort</TableHead>
-                <TableHead>Time limit</TableHead>
-                <TableHead>Security</TableHead>
-              </TableRow>
-            </TableHeader>
-            <TableBody>
-              {!quizzes?.length ? (
-                <TableRow>
-                  <TableCell colSpan={4} className="text-center text-muted-foreground py-8">
-                    {canManage ? (
-                      <>
-                        No quizzes yet.{" "}
-                        <Link href={newQuizHref} className="text-primary underline font-medium">
-                          Create your first multiple-choice quiz
-                        </Link>{" "}
-                        (timer included).
-                      </>
-                    ) : (
-                      "No quizzes published for your cohort yet."
-                    )}
-                  </TableCell>
-                </TableRow>
-              ) : (
-                quizzes.map((q) => (
-                  <TableRow key={q.id}>
-                    <TableCell className="font-medium">{q.title}</TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {cohorts?.find((c) => c.id === q.cohort_id)?.name ?? "—"}
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      {q.time_limit_minutes} min
-                    </TableCell>
-                    <TableCell className="text-muted-foreground">
-                      Medium ({q.max_focus_violations} violations)
-                    </TableCell>
-                  </TableRow>
-                ))
-              )}
-            </TableBody>
-          </Table>
+      {isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {Array.from({ length: 3 }).map((_, i) => (
+            <div key={i} className="h-40 animate-pulse rounded-2xl bg-muted" />
+          ))}
+        </div>
+      ) : !quizzes?.length ? (
+        <EmptyState
+          icon={ClipboardList}
+          title="No quizzes yet"
+          body={isStaff ? "Write a short quiz to check what your students remember." : "Quizzes for your class appear here."}
+          action={
+            isStaff ? (
+              <Button asChild>
+                <Link href={`${root}/quizzes/new`}>
+                  <Plus /> New quiz
+                </Link>
+              </Button>
+            ) : null
+          }
+        />
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {quizzes.map((q) => {
+            const due = q.due_at ? new Date(q.due_at) : null;
+            const overdue = due ? due.getTime() < Date.now() : false;
+            return (
+              <article key={q.id} className="flex flex-col rounded-2xl border border-border bg-card p-5">
+                <div className="flex items-start justify-between gap-2">
+                  <Badge tone="primary">{cohortName(q.cohort_id)}</Badge>
+                  {due ? (
+                    <Badge tone={overdue ? "default" : "warning"}>
+                      <CalendarClock className="size-3" />
+                      {overdue ? "Closed" : `Due ${due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}`}
+                    </Badge>
+                  ) : null}
+                </div>
+                <h2 className="mt-3 line-clamp-2 flex-1 text-lg font-bold leading-snug">{q.title}</h2>
+                <div className="mt-4 flex items-center gap-4 text-sm text-muted-foreground">
+                  <span className="flex items-center gap-1.5">
+                    <HelpCircle className="size-4" /> {q.question_count} {q.question_count === 1 ? "question" : "questions"}
+                  </span>
+                  <span className="flex items-center gap-1.5">
+                    <Timer className="size-4" /> {q.time_limit_minutes} min
+                  </span>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
     </div>

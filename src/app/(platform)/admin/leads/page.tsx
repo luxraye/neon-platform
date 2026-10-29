@@ -14,7 +14,7 @@ export default async function AdminLeadsPage() {
   return (
     <div className="space-y-6">
       <div>
-        <h1 className="text-2xl font-semibold">Leads</h1>
+        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">Leads</h1>
         <p className="text-muted-foreground text-sm">Contact form inbox — provision a center from a lead</p>
       </div>
       <AdminLeadsContent leads={leads ?? []} />
