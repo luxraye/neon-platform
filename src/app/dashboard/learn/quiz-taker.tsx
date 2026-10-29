@@ -3,12 +3,8 @@
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
 import { Button } from "@/components/ui/button";
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { ChevronLeft, ChevronRight, X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 import { submitQuizAttempt } from "./actions";
 
@@ -155,75 +151,140 @@ export function QuizTaker({
   const q = questions[currentIndex];
   const mins = Math.floor(secondsLeft / 60);
   const secs = secondsLeft % 60;
+  const answeredCount = Object.keys(answers).length;
+  const lowTime = secondsLeft <= 60;
+
+  const exit = () => {
+    if (submitted) return onClose();
+    if (confirm("Leave the quiz? Your answers so far will be submitted.")) void handleSubmit("manual");
+  };
 
   if (!questions.length) {
     return (
-      <div>
-        <p className="text-muted-foreground">No questions in this quiz.</p>
-        <Button variant="outline" onClick={onClose} className="mt-4">Back</Button>
+      <div className="fixed inset-0 z-[60] flex flex-col items-center justify-center gap-4 bg-background p-6 text-center">
+        <p className="text-muted-foreground">This quiz has no questions yet.</p>
+        <Button variant="outline" onClick={onClose}>Back</Button>
       </div>
     );
   }
 
   return (
-    <div>
-      <div className="flex items-center justify-between mb-6">
-        <div>
-          <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl">{quiz.title}</h1>
-          <p className="text-sm text-muted-foreground">
-            Question {currentIndex + 1} of {questions.length}
-            {!submitted && ` · Time left: ${mins}:${secs.toString().padStart(2, "0")}`}
-          </p>
+    <div className="fixed inset-0 z-[60] flex flex-col bg-background select-none">
+      <header className="border-b border-border bg-card">
+        <div className="mx-auto flex max-w-3xl items-center gap-3 px-4 py-3">
+          <div className="min-w-0 flex-1">
+            <p className="truncate text-sm font-bold">{quiz.title}</p>
+            <p className="text-xs text-muted-foreground">
+              {answeredCount} of {questions.length} answered
+              {focusViolations > 0 ? (
+                <span className="ml-2 font-semibold text-warning">
+                  · Left screen {focusViolations}/{maxFocusViolations}
+                </span>
+              ) : null}
+            </p>
+          </div>
+          <span
+            className={cn(
+              "rounded-full px-3 py-1 font-mono text-sm font-bold tabular-nums",
+              lowTime ? "animate-pulse bg-destructive text-white" : "bg-ink text-neon"
+            )}
+            aria-live="polite"
+          >
+            {mins}:{secs.toString().padStart(2, "0")}
+          </span>
+          <Button variant="ghost" size="sm" onClick={exit}>
+            <X /> Exit
+          </Button>
         </div>
-        <Button variant="outline" onClick={onClose}>Exit</Button>
-      </div>
+        <div className="h-1 bg-muted">
+          <div className="h-full bg-primary transition-all" style={{ width: `${((currentIndex + 1) / questions.length) * 100}%` }} />
+        </div>
+      </header>
 
-      <Card>
-        <CardHeader>
-          <CardTitle className="text-base">{q.question}</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-2">
-          {q.options.map((opt, oIndex) => (
-            <label
-              key={oIndex}
-              className={`flex items-center gap-2 rounded-lg border p-3 cursor-pointer transition-colors ${
-                answers[currentIndex] === oIndex
-                  ? "border-primary bg-primary/10"
-                  : "border-border hover:bg-muted/50"
-              }`}
-            >
-              <input
-                type="radio"
-                name="option"
-                checked={answers[currentIndex] === oIndex}
-                onChange={() => setAnswers((a) => ({ ...a, [currentIndex]: oIndex }))}
-                disabled={submitted}
-                className="sr-only"
-              />
-              <span>{opt || "(empty option)"}</span>
-            </label>
-          ))}
-        </CardContent>
-      </Card>
+      <main className="flex-1 overflow-y-auto">
+        <div className="mx-auto max-w-3xl px-4 py-6 sm:py-10">
+          <p className="text-sm font-semibold text-primary">
+            Question {currentIndex + 1} of {questions.length}
+          </p>
+          <h1 className="mt-2 text-xl font-bold leading-snug sm:text-2xl">{q.question}</h1>
+          <div className="mt-6 space-y-3" role="radiogroup">
+            {q.options.map((opt, oIndex) => {
+              const chosen = answers[currentIndex] === oIndex;
+              return (
+                <button
+                  key={oIndex}
+                  type="button"
+                  role="radio"
+                  aria-checked={chosen}
+                  disabled={submitted}
+                  onClick={() => setAnswers((a) => ({ ...a, [currentIndex]: oIndex }))}
+                  className={cn(
+                    "flex w-full items-center gap-3 rounded-2xl border-2 p-4 text-left transition-colors",
+                    chosen ? "border-primary bg-secondary" : "border-border bg-card hover:border-primary/40"
+                  )}
+                >
+                  <span
+                    className={cn(
+                      "flex size-8 shrink-0 items-center justify-center rounded-lg text-sm font-bold",
+                      chosen ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+                    )}
+                  >
+                    {String.fromCharCode(65 + oIndex)}
+                  </span>
+                  <span className="text-[15px]">{opt || "(empty option)"}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      </main>
 
-      <div className="flex justify-between mt-6">
-        <Button
-          variant="outline"
-          onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))}
-          disabled={currentIndex === 0}
-        >
-          Previous
-        </Button>
-        {currentIndex < questions.length - 1 ? (
-          <Button onClick={() => setCurrentIndex((i) => i + 1)}>
-            Next
-          </Button>
-        ) : (
-          <Button onClick={() => void handleSubmit("manual")} disabled={submitting}>
-            {submitting ? "Submitting…" : "Submit"}
-          </Button>
-        )}
-      </div>
+      <footer className="border-t border-border bg-card pb-[env(safe-area-inset-bottom)]">
+        <div className="mx-auto max-w-3xl px-4 py-3">
+          <div className="mb-3 flex flex-wrap justify-center gap-1.5">
+            {questions.map((_, i) => (
+              <button
+                key={i}
+                type="button"
+                onClick={() => setCurrentIndex(i)}
+                aria-label={`Question ${i + 1}`}
+                className={cn(
+                  "size-7 rounded-md text-xs font-semibold",
+                  i === currentIndex
+                    ? "bg-primary text-primary-foreground"
+                    : typeof answers[i] === "number"
+                      ? "bg-secondary text-secondary-foreground"
+                      : "bg-muted text-muted-foreground"
+                )}
+              >
+                {i + 1}
+              </button>
+            ))}
+          </div>
+          <div className="flex justify-between gap-3">
+            <Button variant="outline" onClick={() => setCurrentIndex((i) => Math.max(0, i - 1))} disabled={currentIndex === 0}>
+              <ChevronLeft /> Back
+            </Button>
+            {currentIndex < questions.length - 1 ? (
+              <Button onClick={() => setCurrentIndex((i) => i + 1)}>
+                Next <ChevronRight />
+              </Button>
+            ) : (
+              <Button
+                variant="neon"
+                disabled={submitting}
+                onClick={() => {
+                  const missing = questions.length - answeredCount;
+                  if (missing > 0 && !confirm(`${missing} ${missing === 1 ? "question is" : "questions are"} unanswered. Submit anyway?`)) return;
+                  void handleSubmit("manual");
+                }}
+              >
+                {submitting ? "Submitting…" : "Submit quiz"}
+              </Button>
+            )}
+          </div>
+        </div>
+      </footer>
     </div>
   );
 }

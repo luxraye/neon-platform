@@ -61,7 +61,7 @@ export async function startQuizAttempt(input: { quizId: string; password: string
   const { data: quiz, error: quizError } = await admin
     .from("quizzes")
     .select(
-      "id, title, institution_id, cohort_id, time_limit_minutes, questions, access_password_hash, security_mode, max_focus_violations"
+      "id, title, institution_id, cohort_id, time_limit_minutes, questions, access_password_hash, security_mode, max_focus_violations, due_at"
     )
     .eq("id", input.quizId)
     .maybeSingle();
@@ -75,6 +75,10 @@ export async function startQuizAttempt(input: { quizId: string; password: string
   const studentCohortId = identity.profile?.cohort_id ?? null;
   if (quizRow.cohort_id && quizRow.cohort_id !== studentCohortId) {
     return { success: false as const, error: "This quiz is not for your cohort." };
+  }
+  const dueAt = (quiz as { due_at?: string | null }).due_at;
+  if (dueAt && new Date(dueAt).getTime() < Date.now()) {
+    return { success: false as const, error: "This quiz has closed." };
   }
   if (quizRow.access_password_hash && !verifyPassword(input.password ?? "", quizRow.access_password_hash)) {
     return { success: false as const, error: "Incorrect quiz password." };

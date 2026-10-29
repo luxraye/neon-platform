@@ -426,6 +426,10 @@ export type StudentReportDto = {
   attendancePct: number;
   totalDays: number;
   presentDays: number;
+  lateDays: number;
+  absentDays: number;
+  studentName: string;
+  cohortName: string | null;
   quizAvg: number;
   attempts: { quiz_title: string; score: number; submitted_at: string }[];
   materials: { title: string; subject: string | null }[];
@@ -452,19 +456,23 @@ export async function qStudentReport(studentId: string, startDate: string, endDa
       .eq("student_id", studentId)
       .gte("submitted_at", startDate)
       .lte("submitted_at", `${endDate}T23:59:59.999Z`),
-    db.from("profiles").select("cohort_id").eq("id", studentId).maybeSingle(),
+    db.from("profiles").select("cohort_id, full_name, email").eq("id", studentId).maybeSingle(),
     quizTitlesFor(actor.institution_id),
   ]);
 
   const att = (attendance.data ?? []) as { status: string }[];
   const presentDays = att.filter((r) => r.status === "present").length;
+  const lateDays = att.filter((r) => r.status === "late").length;
   const done = ((attempts.data ?? []) as { quiz_id: string; score: number | null; submitted_at: string; status: string }[])
     .filter((a) => a.status !== "in_progress" && titles[a.quiz_id])
     .map((a) => ({ quiz_title: titles[a.quiz_id], score: Number(a.score ?? 0), submitted_at: a.submitted_at }));
 
   let materials: { title: string; subject: string | null }[] = [];
   const cohortId = profile.data?.cohort_id as string | null | undefined;
+  let cohortName: string | null = null;
   if (cohortId) {
+    const { data: c } = await db.from("cohorts").select("name").eq("id", cohortId).maybeSingle();
+    cohortName = (c?.name as string | undefined) ?? null;
     const { data: mat } = await db
       .from("materials")
       .select("title, subject")
@@ -474,9 +482,14 @@ export async function qStudentReport(studentId: string, startDate: string, endDa
   }
 
   return {
-    attendancePct: att.length ? (presentDays / att.length) * 100 : 0,
+    // Late still counts as attended.
+    attendancePct: att.length ? ((presentDays + lateDays) / att.length) * 100 : 0,
     totalDays: att.length,
     presentDays,
+    lateDays,
+    absentDays: att.length - presentDays - lateDays,
+    studentName: (profile.data?.full_name as string | null) || (profile.data?.email as string | null) || "Student",
+    cohortName,
     quizAvg: done.length ? done.reduce((s, a) => s + a.score, 0) / done.length : 0,
     attempts: done,
     materials,

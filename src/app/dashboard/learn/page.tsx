@@ -1,235 +1,235 @@
 "use client";
 
-import { useState } from "react";
+import { useMemo, useState } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { BookOpen, CalendarClock, CheckCircle2, ClipboardList, HelpCircle, Lock, Timer } from "lucide-react";
 import { useProfile } from "@/hooks/use-profile";
-import { qMaterials, qQuizzes, type QuizSummaryDto } from "@/app/data/queries";
-import { useQuery } from "@tanstack/react-query";
+import { qAttempts, qQuizzes, type QuizSummaryDto } from "@/app/data/queries";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { toast } from "sonner";
-import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
+import { Badge, EmptyState, PageHeader } from "@/components/ui/page";
+import { MaterialsLibrary } from "@/components/materials/materials-library";
 import { QuizTaker } from "./quiz-taker";
 import { startQuizAttempt } from "./actions";
 
-type Material = {
-  id: string;
-  title: string;
-  content_url: string | null;
-  description: string | null;
-  subject: string | null;
-};
-
-type Quiz = QuizSummaryDto;
-
-type QuizQuestionForTaker = { question: string; options: string[] };
-
-function useCohortMaterials(cohortId: string | null) {
-  return useQuery({
-    queryKey: ["learn", "materials", cohortId ?? ""],
-    queryFn: async (): Promise<Material[]> => qMaterials(),
-    enabled: !!cohortId,
-  });
-}
-
-function useCohortQuizzes(cohortId: string | null) {
-  return useQuery({
-    queryKey: ["learn", "quizzes", cohortId ?? ""],
-    queryFn: async (): Promise<Quiz[]> => qQuizzes(),
-    enabled: !!cohortId,
-  });
-}
+type Tab = "quizzes" | "materials";
 
 export default function LearnPage() {
-  const { data: profileData } = useProfile();
-  const cohortId = profileData?.profile?.cohort_id ?? null;
-  const { data: materials, isLoading: materialsLoading } = useCohortMaterials(cohortId);
-  const { data: quizzes, isLoading: quizzesLoading } = useCohortQuizzes(cohortId);
-  const [takingQuizId, setTakingQuizId] = useState<string | null>(null);
-  const [attemptId, setAttemptId] = useState<string | null>(null);
-  const [attemptQuestions, setAttemptQuestions] = useState<QuizQuestionForTaker[]>([]);
-  const [password, setPassword] = useState("");
-  const [startingQuizId, setStartingQuizId] = useState<string | null>(null);
+  const queryClient = useQueryClient();
+  const { data: me, isLoading: meLoading } = useProfile();
+  const cohortId = me?.profile?.cohort_id ?? null;
+  const isStudent = me?.profile?.role === "student";
+  const [tab, setTab] = useState<Tab>("quizzes");
 
-  if (!profileData?.profile) {
-    return (
-      <div className="px-2 sm:px-4">
-        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">Learn</h1>
-        <p className="text-muted-foreground text-sm">Loading…</p>
-      </div>
-    );
-  }
-
-  if (profileData.profile.role !== "student") {
-    return (
-      <div className="px-2 sm:px-4">
-        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">Learn</h1>
-        <p className="text-muted-foreground text-sm">This page is for students. Go to Materials or Quizzes to manage content.</p>
-      </div>
-    );
-  }
-
-  if (!cohortId) {
-    return (
-      <div className="px-2 sm:px-4">
-        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-2">Learn</h1>
-        <p className="text-muted-foreground text-sm">
-          You’re not assigned to a cohort yet. A headmaster will assign you so you can access materials and quizzes.
-        </p>
-      </div>
-    );
-  }
-
-  const quiz = takingQuizId && quizzes?.find((q) => q.id === takingQuizId);
-
-  const requestFullscreen = async () => {
-    try {
-      if (!document.fullscreenElement) {
-        await document.documentElement.requestFullscreen();
-      }
-    } catch {
-      toast.warning("Could not enter full-screen. Continue without full-screen.");
+  const { data: quizzes, isLoading } = useQuery({
+    queryKey: ["learn", "quizzes", cohortId ?? ""],
+    queryFn: () => qQuizzes(),
+    enabled: !!cohortId,
+  });
+  const { data: attempts } = useQuery({
+    queryKey: ["results-attempts"],
+    queryFn: () => qAttempts(),
+    enabled: !!cohortId,
+  });
+  const bestScore = useMemo(() => {
+    const m: Record<string, number> = {};
+    for (const a of attempts ?? []) {
+      if (a.status === "in_progress") continue;
+      m[a.quiz_id] = Math.max(m[a.quiz_id] ?? 0, Number(a.score ?? 0));
     }
-  };
+    return m;
+  }, [attempts]);
 
-  const handleStartQuiz = async () => {
-    if (!takingQuizId) return;
-    setStartingQuizId(takingQuizId);
-    const result = await startQuizAttempt({ quizId: takingQuizId, password });
-    setStartingQuizId(null);
-    if (!result.success) {
-      toast.error(result.error);
+  const [selected, setSelected] = useState<QuizSummaryDto | null>(null);
+  const [password, setPassword] = useState("");
+  const [starting, setStarting] = useState(false);
+  const [attempt, setAttempt] = useState<{ id: string; questions: { question: string; options: string[] }[] } | null>(null);
+
+  async function start() {
+    if (!selected) return;
+    setStarting(true);
+    const res = await startQuizAttempt({ quizId: selected.id, password });
+    setStarting(false);
+    if (!res.success) {
+      toast.error(res.error);
       return;
     }
-    await requestFullscreen();
-    setAttemptQuestions(result.questions);
-    setAttemptId(result.attemptId);
+    try {
+      if (!document.fullscreenElement) await document.documentElement.requestFullscreen();
+    } catch {
+      // Some phones don't allow full screen; the quiz still works.
+    }
+    setAttempt({ id: res.attemptId, questions: res.questions });
     setPassword("");
-  };
+  }
+
+  function close() {
+    setAttempt(null);
+    setSelected(null);
+    setPassword("");
+    if (document.fullscreenElement) void document.exitFullscreen().catch(() => {});
+    queryClient.invalidateQueries({ queryKey: ["results-attempts"] });
+  }
+
+  if (meLoading) {
+    return <div className="h-40 animate-pulse rounded-2xl bg-muted" />;
+  }
+  if (!isStudent || !cohortId) {
+    return (
+      <div className="space-y-6">
+        <PageHeader title="Learn" />
+        <EmptyState
+          icon={BookOpen}
+          title={isStudent ? "Not in a class yet" : "For students"}
+          body={isStudent ? "Your centre will place you in a cohort, then your materials and quizzes appear here." : "Manage content from Materials and Quizzes."}
+        />
+      </div>
+    );
+  }
+
+  const todo = (quizzes ?? []).filter((q) => bestScore[q.id] === undefined);
+  const done = (quizzes ?? []).filter((q) => bestScore[q.id] !== undefined);
 
   return (
-    <>
-      <div className="min-h-0 w-full px-2 sm:px-4 pb-6">
-        <h1 className="text-2xl font-extrabold tracking-tight sm:text-3xl mb-4 sm:mb-6">Learn</h1>
+    <div className="space-y-6">
+      <PageHeader title="Learn" description="Your quizzes and study materials." />
 
-        <section className="mb-6 sm:mb-8">
-          <h2 className="text-base font-bold mb-2 sm:mb-3">Materials</h2>
-          {materialsLoading && <p className="text-muted-foreground text-sm">Loading materials…</p>}
-          {!materialsLoading && (!materials?.length ? (
-            <p className="text-muted-foreground text-sm">No materials for your cohort yet.</p>
-          ) : (
-            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-              {materials?.map((m) => (
-                <Card key={m.id} className="touch-manipulation">
-                  <CardHeader className="pb-2 px-4 sm:px-6">
-                    <CardTitle className="text-base">{m.title}</CardTitle>
-                    {m.subject && (
-                      <CardDescription>{m.subject}</CardDescription>
-                    )}
-                  </CardHeader>
-                  <CardContent className="px-4 sm:px-6">
-                    {m.description && (
-                      <p className="text-sm text-muted-foreground mb-2">{m.description}</p>
-                    )}
-                    {m.content_url ? (
-                      <Button asChild size="sm" className="min-h-10">
-                        <a href={m.content_url} target="_blank" rel="noopener noreferrer">
-                          Open
-                        </a>
-                      </Button>
-                    ) : (
-                      <span className="text-sm text-muted-foreground">No link</span>
-                    )}
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ))}
-        </section>
-
-        <section>
-          <h2 className="text-base font-bold mb-2 sm:mb-3">Quizzes</h2>
-          {quizzesLoading && <p className="text-muted-foreground text-sm">Loading quizzes…</p>}
-          {!quizzesLoading && (!quizzes?.length ? (
-            <p className="text-muted-foreground text-sm">No quizzes for your cohort yet.</p>
-          ) : (
-            <div className="grid gap-3 grid-cols-1 sm:grid-cols-2">
-              {quizzes?.map((q) => (
-                <Card key={q.id} className="touch-manipulation">
-                  <CardHeader className="pb-2 px-4 sm:px-6">
-                    <CardTitle className="text-base">{q.title}</CardTitle>
-                    <CardDescription>
-                      {q.question_count} questions · {q.time_limit_minutes} min
-                      {q.due_at ? ` · due ${q.due_at}` : ""}
-                    </CardDescription>
-                  </CardHeader>
-                  <CardContent className="px-4 sm:px-6">
-                    <Button size="sm" className="min-h-10" onClick={() => setTakingQuizId(q.id)}>
-                      Take quiz
-                    </Button>
-                  </CardContent>
-                </Card>
-              ))}
-            </div>
-          ))}
-        </section>
+      <div className="inline-flex rounded-xl border border-border bg-card p-1" role="tablist">
+        {(
+          [
+            ["quizzes", `Quizzes${todo.length ? ` · ${todo.length} to do` : ""}`],
+            ["materials", "Materials"],
+          ] as const
+        ).map(([k, label]) => (
+          <button
+            key={k}
+            role="tab"
+            aria-selected={tab === k}
+            onClick={() => setTab(k)}
+            className={cn(
+              "rounded-lg px-4 py-1.5 text-sm font-semibold",
+              tab === k ? "bg-primary text-primary-foreground" : "text-muted-foreground hover:text-foreground"
+            )}
+          >
+            {label}
+          </button>
+        ))}
       </div>
 
-      <Dialog open={!!takingQuizId} onOpenChange={(open) => {
-        if (!open) {
-          setTakingQuizId(null);
-          setAttemptId(null);
-          setPassword("");
-        }
-      }}>
-        <DialogContent className="max-w-4xl max-h-[90vh] overflow-y-auto">
-          {!quiz || !takingQuizId ? null : !attemptId ? (
-            <>
-              <DialogHeader>
-                <DialogTitle>Start quiz: {quiz.title}</DialogTitle>
-                <DialogDescription>
-                  Enter the tutor password to begin. Quiz opens in secure mode with countdown and focus monitoring.
-                </DialogDescription>
-              </DialogHeader>
-              <div className="space-y-3">
-                <Label htmlFor="quiz-access-password">Quiz password</Label>
-                <Input
-                  id="quiz-access-password"
-                  type="password"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  placeholder="Enter quiz password"
-                  minLength={6}
-                />
-              </div>
-              <div className="flex justify-end">
-                <Button onClick={handleStartQuiz} disabled={!password || startingQuizId === takingQuizId}>
-                  {startingQuizId === takingQuizId ? "Starting…" : "Start now"}
-                </Button>
-              </div>
-            </>
-          ) : (
-            <QuizTaker
-              quiz={{ id: quiz.id, title: quiz.title, time_limit_minutes: quiz.time_limit_minutes }}
-              questions={attemptQuestions}
-              attemptId={attemptId}
-              maxFocusViolations={quiz.max_focus_violations}
-              onClose={() => {
-                setTakingQuizId(null);
-                setAttemptId(null);
-                setPassword("");
-              }}
-            />
+      {tab === "materials" ? (
+        <MaterialsLibrary embedded />
+      ) : isLoading ? (
+        <div className="grid gap-4 sm:grid-cols-2">
+          {Array.from({ length: 2 }).map((_, i) => (
+            <div key={i} className="h-40 animate-pulse rounded-2xl bg-muted" />
+          ))}
+        </div>
+      ) : !quizzes?.length ? (
+        <EmptyState icon={ClipboardList} title="No quizzes yet" body="When a tutor sets a quiz for your class it shows up here." />
+      ) : (
+        <div className="space-y-6">
+          {[
+            ["To do", todo],
+            ["Done", done],
+          ].map(([heading, list]) =>
+            (list as QuizSummaryDto[]).length ? (
+              <section key={heading as string}>
+                <h2 className="mb-3 text-sm font-bold text-muted-foreground">{heading as string}</h2>
+                <div className="grid gap-4 sm:grid-cols-2">
+                  {(list as QuizSummaryDto[]).map((q) => {
+                    const score = bestScore[q.id];
+                    const due = q.due_at ? new Date(q.due_at) : null;
+                    const closed = due ? due.getTime() < Date.now() : false;
+                    return (
+                      <article key={q.id} className="flex flex-col rounded-2xl border border-border bg-card p-5">
+                        <div className="flex items-start justify-between gap-2">
+                          <h3 className="line-clamp-2 font-bold leading-snug">{q.title}</h3>
+                          {score !== undefined ? (
+                            <Badge tone={score >= 50 ? "success" : "danger"}>
+                              <CheckCircle2 className="size-3" /> {Math.round(score)}%
+                            </Badge>
+                          ) : due ? (
+                            <Badge tone={closed ? "default" : "warning"}>
+                              <CalendarClock className="size-3" />
+                              {closed ? "Closed" : due.toLocaleDateString("en-GB", { day: "numeric", month: "short" })}
+                            </Badge>
+                          ) : null}
+                        </div>
+                        <div className="mt-3 flex items-center gap-4 text-sm text-muted-foreground">
+                          <span className="flex items-center gap-1.5">
+                            <HelpCircle className="size-4" /> {q.question_count} questions
+                          </span>
+                          <span className="flex items-center gap-1.5">
+                            <Timer className="size-4" /> {q.time_limit_minutes} min
+                          </span>
+                        </div>
+                        <div className="mt-4">
+                          <Button
+                            className="w-full"
+                            variant={score !== undefined ? "outline" : "default"}
+                            disabled={closed && score === undefined}
+                            onClick={() => setSelected(q)}
+                          >
+                            {score !== undefined ? "Try again" : closed ? "Closed" : "Start quiz"}
+                          </Button>
+                        </div>
+                      </article>
+                    );
+                  })}
+                </div>
+              </section>
+            ) : null
           )}
+        </div>
+      )}
+
+      <Dialog open={!!selected && !attempt} onOpenChange={(o) => !o && setSelected(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>{selected?.title}</DialogTitle>
+            <DialogDescription>
+              {selected?.question_count} questions, {selected?.time_limit_minutes} minutes. The timer starts as soon as you begin. Leaving the
+              quiz screen {selected?.max_focus_violations} times submits it automatically.
+            </DialogDescription>
+          </DialogHeader>
+          <form
+            onSubmit={(e) => {
+              e.preventDefault();
+              void start();
+            }}
+            className="space-y-4"
+          >
+            <div className="space-y-2">
+              <Label htmlFor="quiz-pw" className="flex items-center gap-1.5">
+                <Lock className="size-3.5" /> Quiz password from your tutor
+              </Label>
+              <Input id="quiz-pw" type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoFocus required />
+            </div>
+            <DialogFooter>
+              <Button type="button" variant="outline" onClick={() => setSelected(null)}>
+                Not now
+              </Button>
+              <Button type="submit" disabled={!password || starting}>
+                {starting ? "Starting…" : "Begin"}
+              </Button>
+            </DialogFooter>
+          </form>
         </DialogContent>
       </Dialog>
-    </>
+
+      {selected && attempt ? (
+        <QuizTaker
+          quiz={{ id: selected.id, title: selected.title, time_limit_minutes: selected.time_limit_minutes }}
+          questions={attempt.questions}
+          attemptId={attempt.id}
+          maxFocusViolations={selected.max_focus_violations}
+          onClose={close}
+        />
+      ) : null}
+    </div>
   );
 }
