@@ -25,14 +25,16 @@ env:
     value: "1:865527867666:web:aa285611e269ba60e36bcb"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_APP_URL
-    value: https://neon-bw-3x0x.web.app
+    value: https://neon--neon-bw-3x0x.europe-west4.hosted.app
     availability: [BUILD, RUNTIME]
-  - variable: RESEND_FROM
-    value: Neon <notifications@REPLACE_ME>
-    availability: [RUNTIME]
-  - variable: RESEND_API_KEY
-    secret: RESEND_API_KEY
-    availability: [RUNTIME]
+  # Email is off until Resend is set up. To turn it on, run
+  # `firebase apphosting:secrets:set RESEND_API_KEY` and uncomment these:
+  # - variable: RESEND_FROM
+  #   value: Neon <notifications@your-verified-domain>
+  #   availability: [RUNTIME]
+  # - variable: RESEND_API_KEY
+  #   secret: RESEND_API_KEY
+  #   availability: [RUNTIME]
   - variable: CRON_SECRET
     secret: CRON_SECRET
     availability: [RUNTIME]
