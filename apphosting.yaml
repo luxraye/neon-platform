@@ -25,7 +25,7 @@ env:
     value: "1:865527867666:web:aa285611e269ba60e36bcb"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_APP_URL
-    value: https://neon--neon-bw-3x0x.europe-west4.hosted.app
+    value: https://neon-platform--neon-bw-3x0x.us-east4.hosted.app
     availability: [BUILD, RUNTIME]
   # Email is off until Resend is set up. To turn it on, run
   # `firebase apphosting:secrets:set RESEND_API_KEY` and uncomment these:
