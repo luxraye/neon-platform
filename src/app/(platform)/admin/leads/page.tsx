@@ -1,10 +1,11 @@
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { PageHeader } from "@/components/ui/page";
+import { getDb } from "@/lib/server/db";
 import { AdminLeadsContent } from "./admin-leads-content";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminLeadsPage() {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
 
   const { data: leads } = await admin
     .from("leads")
@@ -13,10 +14,7 @@ export default async function AdminLeadsPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Leads</h1>
-        <p className="text-muted-foreground text-sm">Contact form inbox — provision a center from a lead</p>
-      </div>
+      <PageHeader title="Leads" description="Demo requests from the website. Turn a lead into a centre in one step." />
       <AdminLeadsContent leads={leads ?? []} />
     </div>
   );

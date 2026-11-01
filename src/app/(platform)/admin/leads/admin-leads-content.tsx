@@ -30,7 +30,6 @@ import {
   TableRow,
 } from "@/components/ui/table";
 import { Card, CardContent } from "@/components/ui/card";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
 
 type LeadRow = {
   id: string;
@@ -60,17 +59,10 @@ export function AdminLeadsContent({ leads: initialLeads }: { leads: LeadRow[] })
     setLeads(initialLeads);
   }, [initialLeads]);
 
+  // Refresh every minute so new leads show up without a reload.
   useEffect(() => {
-    const supabase = createBrowserSupabaseClient();
-    const channel = supabase
-      .channel("leads-realtime")
-      .on("postgres_changes", { event: "INSERT", schema: "public", table: "leads" }, () => {
-        router.refresh();
-      })
-      .subscribe();
-    return () => {
-      supabase.removeChannel(channel);
-    };
+    const id = window.setInterval(() => router.refresh(), 60_000);
+    return () => window.clearInterval(id);
   }, [router]);
 
   function openProvisionFromLead(lead: LeadRow) {

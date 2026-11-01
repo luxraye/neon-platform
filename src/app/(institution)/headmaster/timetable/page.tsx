@@ -1,1 +1,1 @@
-export { default } from "@/app/dashboard/timetable/page";
+export { default } from "@/app/_screens/timetable/page";

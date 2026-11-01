@@ -1,4 +1,5 @@
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { PageHeader } from "@/components/ui/page";
+import { getDb } from "@/lib/server/db";
 import { AdminFeedbackContent } from "./admin-feedback-content";
 
 export const dynamic = "force-dynamic";
@@ -19,7 +20,7 @@ type FeedbackRow = {
 };
 
 export default async function AdminFeedbackPage() {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
 
   const { data: feedbackRows } = await admin
     .from("user_feedback")
@@ -52,12 +53,7 @@ export default async function AdminFeedbackPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">User feedback</h1>
-        <p className="text-muted-foreground text-sm">
-          Review user challenges and recommendations from all role dashboards.
-        </p>
-      </div>
+      <PageHeader title="Feedback" description="Problems and ideas sent from inside the app." />
       <AdminFeedbackContent
         feedbackRows={(feedbackRows ?? []) as FeedbackRow[]}
         userMap={userMap}

@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { qAttendance } from "@/app/data/queries";
 import { db } from "@/lib/db";
 
 export type AttendanceRow = {
@@ -17,8 +17,6 @@ export function useAttendanceForDate(
   cohortId: string | null,
   date: string
 ) {
-  const queryClient = useQueryClient();
-  const supabase = createBrowserSupabaseClient();
 
   return useQuery({
     queryKey: ["attendance", institutionId ?? "", cohortId ?? "", date],
@@ -26,14 +24,7 @@ export function useAttendanceForDate(
       if (!institutionId || !cohortId) return [];
       const online = typeof navigator !== "undefined" ? navigator.onLine : true;
       if (online) {
-        const { data, error } = await supabase
-          .from("attendance")
-          .select("id, student_id, date, status, remarks")
-          .eq("institution_id", institutionId)
-          .eq("cohort_id", cohortId)
-          .eq("date", date);
-        if (error) throw error;
-        return (data ?? []) as AttendanceRow[];
+        return qAttendance(cohortId, date);
       }
       const drafts = await db.attendance_drafts
         .where("[cohort_id+date]")

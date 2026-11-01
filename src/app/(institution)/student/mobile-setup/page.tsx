@@ -1,2 +1,2 @@
-export { default } from "@/app/dashboard/mobile-setup/page";
+export { default } from "@/app/_screens/mobile-setup/page";
 

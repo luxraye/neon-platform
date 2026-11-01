@@ -1,1 +1,1 @@
-export { default } from "@/app/dashboard/pricing/page";
+export { default } from "@/app/_screens/pricing/page";

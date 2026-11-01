@@ -1,7 +1,8 @@
 "use server";
 
-import { createClient } from "@/utils/supabase/server";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getActor } from "@/lib/auth/identity";
+import { createAuthUser, deleteAuthUser, temporaryPassword } from "@/lib/server/auth-admin";
+import { getDb } from "@/lib/server/db";
 import { calculateTieredMonthlyDue, getCurrentReportMonth } from "@/lib/billing";
 
 export type ProvisionResult =
@@ -17,27 +18,9 @@ export async function provisionInstitution(formData: {
   headmaster_full_name?: string;
   lead_id?: string;
 }): Promise<ProvisionResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { success: false, error: "Not authenticated." };
-  }
-
-  // Use service role for role verification to avoid RLS blocking the check.
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const role = profile?.role ?? (user.user_metadata?.role as string | undefined);
-  if (role !== "admin") {
-    return { success: false, error: "Only admins can provision institutions." };
-  }
+  const actor = await getActor(["admin"]);
+  if (!actor) return { success: false, error: "Only admins can provision institutions." };
+  const admin = getDb();
 
   const { name, subdomain, subscription_tier, headmaster_email, headmaster_password, headmaster_full_name, lead_id } =
     formData;
@@ -46,16 +29,20 @@ export async function provisionInstitution(formData: {
     return { success: false, error: "Name, subdomain, and headmaster email are required." };
   }
 
-  const tempPassword =
-    headmaster_password?.trim() ||
-    `Neon@${Math.random().toString(36).slice(2, 6)}${Math.random().toString(36).slice(2, 6)}`;
+  const tempPassword = headmaster_password?.trim() || temporaryPassword();
+  const subdomainClean = subdomain.trim().toLowerCase();
+  if (!/^[a-z0-9](?:[a-z0-9-]{1,38}[a-z0-9])$/.test(subdomainClean)) {
+    return { success: false, error: "Short name must be 3-40 lowercase letters, numbers or dashes." };
+  }
+  const { data: taken } = await admin.from("institutions").select("id").eq("subdomain", subdomainClean).maybeSingle();
+  if (taken) return { success: false, error: "That short name is already used by another centre." };
 
   // 1. Create the institution first (no automatic trial).
   const { data: institution, error: instError } = await admin
     .from("institutions")
     .insert({
       name: name.trim(),
-      subdomain: subdomain.trim().toLowerCase(),
+      subdomain: subdomainClean,
       subscription_tier: subscription_tier || "starter",
       is_trial: false,
       trial_ends_at: null,
@@ -70,20 +57,14 @@ export async function provisionInstitution(formData: {
     };
   }
 
-  // 2. Create headmaster Auth user; pass institution_id, role, full_name in user_metadata so
-  //    handle_new_user trigger can create the profile row automatically.
-  const { data: newUser, error: createUserError } = await admin.auth.admin.createUser({
-    email: headmaster_email.trim(),
+  // 2. Create the headmaster's sign-in account and profile.
+  const { data: newUser, error: createUserError } = await createAuthUser({
+    email: headmaster_email,
     password: tempPassword,
-    email_confirm: true,
-    user_metadata: {
-      institution_id: institution.id,
-      role: "headmaster",
-      full_name: headmaster_full_name?.trim() ?? "",
-    },
+    fullName: headmaster_full_name,
   });
 
-  if (createUserError || !newUser.user) {
+  if (createUserError || !newUser) {
     await admin.from("institutions").delete().eq("id", institution.id);
     return {
       success: false,
@@ -91,37 +72,19 @@ export async function provisionInstitution(formData: {
     };
   }
 
-  // Profile is created by DB trigger (handle_new_user) from user_metadata.
-  // If trigger is missing/misconfigured, self-heal by ensuring a profile exists and is linked.
-  const headmasterId = newUser.user.id;
-  const { data: createdProfile } = await admin
-    .from("profiles")
-    .select("id, institution_id, role")
-    .eq("id", headmasterId)
-    .maybeSingle();
-
-  if (!createdProfile || createdProfile.institution_id !== institution.id || createdProfile.role !== "headmaster") {
-    const { error: upsertError } = await admin.from("profiles").upsert(
-      {
-        id: headmasterId,
-        institution_id: institution.id,
-        email: headmaster_email.trim(),
-        role: "headmaster",
-        full_name: headmaster_full_name?.trim() || null,
-      },
-      { onConflict: "id" }
-    );
-    if (upsertError) {
-      // Rollback so we don't leave a broken institution in the system.
-      await admin.auth.admin.deleteUser(headmasterId);
-      await admin.from("institutions").delete().eq("id", institution.id);
-      return {
-        success: false,
-        error:
-          upsertError.message ??
-          "Provisioned institution but failed to create headmaster profile. Check handle_new_user trigger and profiles RLS.",
-      };
-    }
+  const headmasterId = newUser.id;
+  const { error: profileError } = await admin.from("profiles").upsert({
+    id: headmasterId,
+    institution_id: institution.id,
+    email: headmaster_email.trim().toLowerCase(),
+    role: "headmaster",
+    full_name: headmaster_full_name?.trim() || null,
+  });
+  if (profileError) {
+    // Roll back so we don't leave a broken institution in the system.
+    await deleteAuthUser(headmasterId);
+    await admin.from("institutions").delete().eq("id", institution.id);
+    return { success: false, error: profileError.message };
   }
 
   if (lead_id) {
@@ -134,14 +97,10 @@ export async function provisionInstitution(formData: {
 export type DeleteLeadResult = { success: true } | { success: false; error: string };
 
 export async function deleteLead(leadId: string): Promise<DeleteLeadResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role !== "admin") return { success: false, error: "Only admins can delete leads." };
+  const actor = await getActor(["admin"]);
+  if (!actor) return { success: false, error: "Only admins can delete leads." };
 
-  const { error } = await admin.from("leads").delete().eq("id", leadId);
+  const { error } = await getDb().from("leads").delete().eq("id", leadId);
   if (error) return { success: false, error: error.message };
   return { success: true };
 }
@@ -151,26 +110,9 @@ export type GenerateReportResult =
   | { success: false; error: string };
 
 export async function generateMonthlyReport(): Promise<GenerateReportResult> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  if (!user) {
-    return { success: false, error: "Not authenticated." };
-  }
-
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin
-    .from("profiles")
-    .select("role")
-    .eq("id", user.id)
-    .maybeSingle();
-
-  const role = profile?.role ?? (user.user_metadata?.role as string | undefined);
-  if (role !== "admin") {
-    return { success: false, error: "Only admins can generate reports." };
-  }
+  const actor = await getActor(["admin"]);
+  if (!actor) return { success: false, error: "Only admins can generate reports." };
+  const admin = getDb();
 
   const { data: institutions } = await admin
     .from("institutions")
@@ -187,7 +129,8 @@ export async function generateMonthlyReport(): Promise<GenerateReportResult> {
       .from("profiles")
       .select("*", { count: "exact", head: true })
       .eq("institution_id", inst.id)
-      .eq("role", "student");
+      .eq("role", "student")
+      .is("deleted_at", null);
 
     const studentCount = count ?? 0;
     const totalRevenueDue = calculateTieredMonthlyDue(studentCount, inst.subscription_tier);
@@ -212,7 +155,7 @@ export async function generateMonthlyReport(): Promise<GenerateReportResult> {
       },
       { onConflict: "institution_id,report_month" }
     );
-    if (invoiceUpsertError && !/does not exist|relation .* does not exist/i.test(invoiceUpsertError.message)) {
+    if (invoiceUpsertError) {
       return { success: false, error: invoiceUpsertError.message };
     }
   }
@@ -222,12 +165,9 @@ export async function generateMonthlyReport(): Promise<GenerateReportResult> {
 
 export type ExtendTrialResult = { success: true } | { success: false; error: string };
 export async function extendTrial(institutionId: string): Promise<ExtendTrialResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role !== "admin") return { success: false, error: "Only admins can extend trial." };
+  const actor = await getActor(["admin"]);
+  if (!actor) return { success: false, error: "Only admins can extend trial." };
+  const admin = getDb();
   const { data: inst } = await admin
     .from("institutions")
     .select("trial_ends_at")
@@ -250,12 +190,9 @@ export async function setInstitutionTier(
   institutionId: string,
   subscription_tier: "starter" | "growth" | "elite"
 ): Promise<SetTierResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role !== "admin") return { success: false, error: "Only admins can change tier." };
+  const actor = await getActor(["admin"]);
+  if (!actor) return { success: false, error: "Only admins can change tier." };
+  const admin = getDb();
   const { error } = await admin
     .from("institutions")
     .update({ subscription_tier })
@@ -268,12 +205,9 @@ export type DeleteInstitutionResult = { success: true } | { success: false; erro
 
 /** Delete an institution and all dependent data. Unlinks profiles (sets institution_id = null). */
 export async function deleteInstitution(institutionId: string): Promise<DeleteInstitutionResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role !== "admin") return { success: false, error: "Only admins can delete institutions." };
+  const actor = await getActor(["admin"]);
+  if (!actor) return { success: false, error: "Only admins can delete institutions." };
+  const admin = getDb();
 
   // Clear dependent tables (skip if a table doesn't exist in this deployment)
   const tablesWithInstitutionId = [
@@ -286,44 +220,36 @@ export async function deleteInstitution(institutionId: string): Promise<DeleteIn
     "user_feedback",
   ] as const;
 
-  const isTableMissing = (msg: string) =>
-    /could not find the table|does not exist|relation .* does not exist/i.test(msg);
-
   for (const table of tablesWithInstitutionId) {
     const { error } = await admin.from(table).delete().eq("institution_id", institutionId);
-    if (error && !isTableMissing(error.message)) {
+    if (error) {
       return { success: false, error: `Failed to clear ${table}: ${error.message}` };
     }
   }
 
-  const { data: cohortRows } = await admin.from("cohorts").select("id").eq("institution_id", institutionId);
-  const cohortIds = (cohortRows ?? []).map((c) => c.id);
+  const { data: quizRows } = await admin.from("quizzes").select("id").eq("institution_id", institutionId);
+  const quizIds = (quizRows ?? []).map((q: { id: string }) => q.id);
+  if (quizIds.length > 0) {
+    await admin.from("quiz_attempts").delete().in("quiz_id", quizIds);
+  }
 
   const { error: quizErr } = await admin.from("quizzes").delete().eq("institution_id", institutionId);
-  if (quizErr && !isTableMissing(quizErr.message)) {
-    return { success: false, error: `Failed to clear quizzes: ${quizErr.message}` };
-  }
+  if (quizErr) return { success: false, error: `Failed to clear quizzes: ${quizErr.message}` };
 
-  if (cohortIds.length > 0) {
-    const { error: matErr } = await admin.from("materials").delete().in("cohort_id", cohortIds);
-    if (matErr && !isTableMissing(matErr.message)) {
-      return { success: false, error: `Failed to clear materials: ${matErr.message}` };
-    }
-  }
+  const { error: matErr } = await admin.from("materials").delete().eq("institution_id", institutionId);
+  if (matErr) return { success: false, error: `Failed to clear materials: ${matErr.message}` };
+
+  await admin.from("join_requests").delete().eq("institution_id", institutionId);
 
   const { error: cohortErr } = await admin.from("cohorts").delete().eq("institution_id", institutionId);
   if (cohortErr) return { success: false, error: `Failed to delete cohorts: ${cohortErr.message}` };
 
-  try {
-    const { data: postIds } = await admin.from("forum_posts").select("id").eq("institution_id", institutionId);
-    const postIdList = (postIds ?? []).map((p) => p.id);
-    if (postIdList.length > 0) {
-      await admin.from("forum_comments").delete().in("post_id", postIdList);
-    }
-    await admin.from("forum_posts").delete().eq("institution_id", institutionId);
-  } catch {
-    // Forum tables may not exist in all deployments
+  const { data: postIds } = await admin.from("forum_posts").select("id").eq("institution_id", institutionId);
+  const postIdList = (postIds ?? []).map((p: { id: string }) => p.id);
+  if (postIdList.length > 0) {
+    await admin.from("forum_comments").delete().in("post_id", postIdList);
   }
+  await admin.from("forum_posts").delete().eq("institution_id", institutionId);
 
   await admin.from("profiles").update({ institution_id: null }).eq("institution_id", institutionId);
 
@@ -346,13 +272,9 @@ export type PendingDeletionRow = {
 
 /** Admin: list profiles marked for removal (recoverable within 72h). */
 export async function getPendingDeletions(): Promise<PendingDeletionRow[]> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return [];
-
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role !== "admin") return [];
+  const actor = await getActor(["admin"]);
+  if (!actor) return [];
+  const admin = getDb();
   const cutoffIso = new Date(Date.now() - RECOVERY_HOURS * 60 * 60 * 1000).toISOString();
 
   const { data } = await admin
@@ -369,13 +291,9 @@ export type RestoreProfileResult = { success: true } | { success: false; error: 
 
 /** Admin: restore a profile within 72 hours of removal. */
 export async function restoreProfile(profileId: string): Promise<RestoreProfileResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
-
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role !== "admin") return { success: false, error: "Only admins can restore profiles." };
+  const actor = await getActor(["admin"]);
+  if (!actor) return { success: false, error: "Only admins can restore profiles." };
+  const admin = getDb();
 
   const { data: target } = await admin
     .from("profiles")
@@ -407,12 +325,9 @@ export async function updateFeedbackStatus(formData: {
   status: "new" | "reviewing" | "planned" | "resolved" | "dismissed";
   adminNotes?: string;
 }): Promise<UpdateFeedbackStatusResult> {
-  const supabase = await createClient();
-  const { data: { user } } = await supabase.auth.getUser();
-  if (!user) return { success: false, error: "Not authenticated." };
-  const admin = createServiceRoleClient();
-  const { data: profile } = await admin.from("profiles").select("role").eq("id", user.id).maybeSingle();
-  if (profile?.role !== "admin") return { success: false, error: "Only admins can update feedback." };
+  const actor = await getActor(["admin"]);
+  if (!actor) return { success: false, error: "Only admins can update feedback." };
+  const admin = getDb();
 
   const { feedbackId, status, adminNotes } = formData;
   if (!feedbackId) return { success: false, error: "Feedback id is required." };

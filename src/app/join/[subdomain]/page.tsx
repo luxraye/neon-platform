@@ -1,44 +1,48 @@
+import type { Metadata } from "next";
 import { notFound } from "next/navigation";
+import { AuthShell } from "@/components/auth/auth-shell";
 import { getInstitutionBySubdomain } from "./actions";
 import { JoinForm } from "./join-form";
 
 export const dynamic = "force-dynamic";
 
-type Props = {
-  params: Promise<{ subdomain: string }>;
-};
+type Props = { params: Promise<{ subdomain: string }> };
+
+export async function generateMetadata({ params }: Props): Promise<Metadata> {
+  const { subdomain } = await params;
+  const institution = await getInstitutionBySubdomain(subdomain);
+  return { title: institution ? `Join ${institution.name}` : "Join a centre" };
+}
 
 export default async function JoinPage({ params }: Props) {
   const { subdomain } = await params;
   const institution = await getInstitutionBySubdomain(subdomain);
-
-  if (!institution) {
-    notFound();
-  }
+  if (!institution) notFound();
 
   return (
-    <div
-      className="min-h-screen flex items-center justify-center p-4 bg-muted/30"
-      style={{ ["--brand-primary" as string]: institution.primary_color ?? "#0f172a" }}
-    >
-      <div className="w-full max-w-sm space-y-6">
-        <div className="text-center flex flex-col items-center">
+    <AuthShell
+      title={`Join ${institution.name}`}
+      subtitle="Send a request to your centre. Once the headmaster approves it, we'll email you a link to set your password."
+      aside={
+        <div className="space-y-5">
           {institution.logo_url ? (
+            // eslint-disable-next-line @next/next/no-img-element -- remote logo from storage
             <img
               src={institution.logo_url}
               alt={`${institution.name} logo`}
-              className="h-14 w-14 rounded object-contain border border-border bg-white mb-2"
+              className="size-16 rounded-2xl bg-white object-contain p-1.5"
             />
           ) : null}
-          <h1 className="text-2xl font-semibold" style={{ color: "var(--brand-primary)" }}>
-            {institution.name}
-          </h1>
-          <p className="text-muted-foreground mt-1">
-            Create your student account to join.
-          </p>
+          <p className="text-3xl font-extrabold leading-tight">{institution.name}</p>
+          <ol className="space-y-3 text-white/70">
+            <li className="flex gap-3"><span className="font-mono text-neon">01</span> Send your request</li>
+            <li className="flex gap-3"><span className="font-mono text-neon">02</span> The headmaster approves it</li>
+            <li className="flex gap-3"><span className="font-mono text-neon">03</span> Set your password from the email and sign in</li>
+          </ol>
         </div>
-        <JoinForm subdomain={subdomain} primaryColor={institution.primary_color ?? "#0f172a"} />
-      </div>
-    </div>
+      }
+    >
+      <JoinForm subdomain={institution.subdomain} />
+    </AuthShell>
   );
 }

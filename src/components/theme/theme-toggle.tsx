@@ -1,46 +1,30 @@
 "use client";
 
-import { useEffect, useState } from "react";
 import { Moon, Sun } from "lucide-react";
 import { useTheme } from "next-themes";
-import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * Icon-only theme control — never render “Light mode” / “Dark mode” text in the DOM.
- * Those strings caused SSR vs client hydration mismatches with next-themes (resolvedTheme).
+ * Theme switch with no theme-dependent markup: both icons are always rendered and CSS
+ * (the `dark` class next-themes puts on <html>) decides which one shows. The server and the
+ * first client render are identical, which ends the hydration error from the incident report.
  */
-export function ThemeToggle({ className }: { className?: string }) {
+export function ThemeToggle({ className, label = false }: { className?: string; label?: boolean }) {
   const { resolvedTheme, setTheme } = useTheme();
-  const [mounted, setMounted] = useState(false);
 
-  useEffect(() => {
-    // eslint-disable-next-line react-hooks/set-state-in-effect -- one-shot; keeps first server+client paint identical
-    setMounted(true);
-  }, []);
-
-  const isDark = resolvedTheme === "dark";
-  const next = isDark ? "light" : "dark";
-
-  // Mounted guard: avoid any "Light"/"Dark" strings in the DOM until hydrated (next-themes mismatch).
   return (
-    <Button
+    <button
       type="button"
-      variant="ghost"
-      size="sm"
-      className={cn("w-full justify-start gap-2", className)}
-      onClick={() => setTheme(next)}
-      disabled={!mounted}
-      aria-label="Toggle color theme"
-      suppressHydrationWarning
-    >
-      {!mounted ? (
-        <Sun className="size-4 shrink-0 opacity-40" aria-hidden />
-      ) : isDark ? (
-        <Sun className="size-4 shrink-0" aria-hidden />
-      ) : (
-        <Moon className="size-4 shrink-0" aria-hidden />
+      onClick={() => setTheme(resolvedTheme === "dark" ? "light" : "dark")}
+      aria-label="Switch between light and dark theme"
+      className={cn(
+        "inline-flex items-center gap-2 rounded-lg px-3 py-2 text-sm transition-colors hover:bg-white/10",
+        className
       )}
-    </Button>
+    >
+      <Moon className="size-4 shrink-0 dark:hidden" aria-hidden />
+      <Sun className="hidden size-4 shrink-0 dark:block" aria-hidden />
+      {label ? <span>Theme</span> : null}
+    </button>
   );
 }

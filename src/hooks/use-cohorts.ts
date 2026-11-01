@@ -1,7 +1,7 @@
 "use client";
 
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { createBrowserSupabaseClient } from "@/utils/supabase/client";
+import { useQuery } from "@tanstack/react-query";
+import { qCohorts } from "@/app/data/queries";
 import { db, type CohortRecord } from "@/lib/db";
 
 export type Cohort = {
@@ -12,15 +12,8 @@ export type Cohort = {
   created_at: string;
 };
 
-async function fetchCohortsFromSupabase(institutionId: string): Promise<Cohort[]> {
-  const supabase = createBrowserSupabaseClient();
-  const { data, error } = await supabase
-    .from("cohorts")
-    .select("*")
-    .eq("institution_id", institutionId)
-    .order("created_at", { ascending: false });
-  if (error) throw error;
-  return (data ?? []) as Cohort[];
+async function fetchCohortsFromServer(): Promise<Cohort[]> {
+  return qCohorts();
 }
 
 async function persistCohortsToDexie(cohorts: Cohort[]) {
@@ -47,8 +40,6 @@ async function getCohortsFromDexie(institutionId: string): Promise<Cohort[]> {
 }
 
 export function useCohorts(institutionId: string | null) {
-  const queryClient = useQueryClient();
-
   return useQuery({
     queryKey: ["cohorts", institutionId ?? ""],
     queryFn: async (): Promise<Cohort[]> => {
@@ -57,7 +48,7 @@ export function useCohorts(institutionId: string | null) {
       const online = typeof navigator !== "undefined" ? navigator.onLine : true;
 
       if (online) {
-        const cohorts = await fetchCohortsFromSupabase(institutionId);
+        const cohorts = await fetchCohortsFromServer();
         await persistCohortsToDexie(cohorts);
         return cohorts;
       }

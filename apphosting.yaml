@@ -1,0 +1,40 @@
+# Firebase App Hosting settings. Create the secrets with:
+#   firebase apphosting:secrets:set RESEND_API_KEY   (and CRON_SECRET, DPOPAY_* when used)
+# The Admin SDK uses App Hosting's built-in service account, so no private key is needed here.
+runConfig:
+  minInstances: 0
+  maxInstances: 4
+
+env:
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: AIzaSyClA99MG9ILGYcBWEeizVHLHrNaO2o2zIY
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: neon-bw-3x0x.firebaseapp.com
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: neon-bw-3x0x
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET
+    value: neon-bw-3x0x.firebasestorage.app
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID
+    value: "865527867666"
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:865527867666:web:aa285611e269ba60e36bcb"
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_APP_URL
+    value: https://neon-platform--neon-bw-3x0x.us-east4.hosted.app
+    availability: [BUILD, RUNTIME]
+  # Email is off until Resend is set up. To turn it on, run
+  # `firebase apphosting:secrets:set RESEND_API_KEY` and uncomment these:
+  # - variable: RESEND_FROM
+  #   value: Neon <notifications@your-verified-domain>
+  #   availability: [RUNTIME]
+  # - variable: RESEND_API_KEY
+  #   secret: RESEND_API_KEY
+  #   availability: [RUNTIME]
+  - variable: CRON_SECRET
+    secret: CRON_SECRET
+    availability: [RUNTIME]

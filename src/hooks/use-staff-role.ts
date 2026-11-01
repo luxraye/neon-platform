@@ -13,10 +13,7 @@ export function useStaffRole() {
   const { data: profileData, isLoading } = useProfile();
   const isHeadmasterRoute = pathname.startsWith("/headmaster");
   const isTutorRoute = pathname.startsWith("/tutor");
-  const raw =
-    profileData?.profile?.role ??
-    (profileData?.user?.user_metadata?.role as string | undefined) ??
-    null;
+  const raw = profileData?.profile?.role ?? null;
   const role = typeof raw === "string" ? raw.trim().toLowerCase() : null;
   const isStaffFromProfile = role === "headmaster" || role === "tutor";
   const isStaff = isStaffFromProfile || isHeadmasterRoute || isTutorRoute;

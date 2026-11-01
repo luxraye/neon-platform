@@ -1,12 +1,13 @@
-import type { Metadata } from "next";
-import { Geist, Geist_Mono } from "next/font/google";
+import type { Metadata, Viewport } from "next";
+import { Plus_Jakarta_Sans, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { AppProviders } from "@/components/providers/AppProviders";
 import { Toaster } from "@/components/ui/sonner";
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
+const jakarta = Plus_Jakarta_Sans({
+  variable: "--font-jakarta",
   subsets: ["latin"],
+  display: "swap",
 });
 
 const geistMono = Geist_Mono({
@@ -15,9 +16,12 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Neon | Tuition Management Platform",
+  title: {
+    default: "Neon | Run your tuition centre from one place",
+    template: "%s | Neon",
+  },
   description:
-    "The most reliable student management and LMS for tuition centres in Botswana, featuring offline NLM sync.",
+    "Student records, attendance, timetables, learning materials, quizzes and fees for tuition centres in Botswana. Works on weak connections.",
   metadataBase: new URL(process.env.NEXT_PUBLIC_APP_URL || "https://neon.example.com"),
   icons: {
     icon: "/icon.svg",
@@ -25,22 +29,28 @@ export const metadata: Metadata = {
   },
   manifest: "/manifest.json",
   openGraph: {
-    title: "Neon | Tuition Management Platform",
+    title: "Neon | Run your tuition centre from one place",
     description:
-      "The most reliable student management and LMS for tuition centres in Botswana, featuring offline NLM sync.",
-    url: "https://neon.example.com",
+      "Student records, attendance, timetables, learning materials, quizzes and fees for tuition centres in Botswana.",
     siteName: "Neon",
     images: [
       {
         url: "/og-image.png",
         width: 1200,
         height: 630,
-        alt: "Neon — Operating System for Tuition Centres",
+        alt: "Neon: tuition centre management",
       },
     ],
     locale: "en_BW",
     type: "website",
   },
+};
+
+export const viewport: Viewport = {
+  themeColor: [
+    { media: "(prefers-color-scheme: light)", color: "#f6f6fa" },
+    { media: "(prefers-color-scheme: dark)", color: "#0a0b17" },
+  ],
 };
 
 export default function RootLayout({
@@ -49,10 +59,8 @@ export default function RootLayout({
   children: React.ReactNode;
 }>) {
   return (
-    <html lang="en" suppressHydrationWarning>
-      <body
-        className={`${geistSans.variable} ${geistMono.variable} antialiased`}
-      >
+    <html lang="en" className={`${jakarta.variable} ${geistMono.variable}`} suppressHydrationWarning>
+      <body className="antialiased">
         <AppProviders>{children}</AppProviders>
         <Toaster />
       </body>

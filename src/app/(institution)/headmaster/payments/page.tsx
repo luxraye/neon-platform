@@ -1,2 +1,2 @@
-export { default } from "@/app/dashboard/payments/page";
+export { default } from "@/app/_screens/payments/page";
 

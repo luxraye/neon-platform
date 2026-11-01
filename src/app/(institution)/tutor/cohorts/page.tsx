@@ -1,2 +1,2 @@
-export { default } from "@/app/dashboard/cohorts/page";
+export { default } from "@/app/_screens/cohorts/page";
 

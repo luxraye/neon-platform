@@ -19,7 +19,6 @@ export function InstitutionDetailClient({
   institutionName,
   subscriptionTier,
   isTrial,
-  trialEndsAt,
 }: {
   institutionId: string;
   institutionName: string;

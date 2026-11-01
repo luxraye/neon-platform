@@ -1,4 +1,6 @@
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import "server-only";
+
+import { getDb } from "@/lib/server/db";
 import { sendTransactionalEmail } from "@/lib/email";
 
 type NotificationType = "fee_reminder" | "quiz_result" | "announcement";
@@ -13,7 +15,7 @@ export async function notifyUser(
   message: string,
   type: NotificationType
 ): Promise<void> {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   await admin.from("notifications").insert({
     user_id: userId,
     title,
@@ -38,7 +40,7 @@ export async function notifyUsers(
   message: string,
   type: NotificationType
 ): Promise<void> {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const inserts = rows.map((r) => ({
     user_id: r.userId,
     title,
@@ -61,7 +63,7 @@ export async function notifyUsers(
 }
 
 export async function getAdminProfiles(): Promise<{ id: string; email: string | null }[]> {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const { data, error } = await admin.from("profiles").select("id, email").eq("role", "admin");
   if (error) {
     console.error("[notify] getAdminProfiles", error.message);
@@ -74,7 +76,7 @@ export async function getInstitutionStaff(
   institutionId: string,
   roles: ("tutor" | "headmaster")[]
 ): Promise<{ id: string; email: string | null }[]> {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const { data, error } = await admin
     .from("profiles")
     .select("id, email")
@@ -92,7 +94,7 @@ export async function getStudentsForMaterialAudience(
   institutionId: string,
   cohortId: string | null
 ): Promise<{ id: string; email: string | null }[]> {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   let q = admin
     .from("profiles")
     .select("id, email")
@@ -114,7 +116,7 @@ export async function getStudentsForMaterialAudience(
 export async function getHeadmastersForInstitution(
   institutionId: string
 ): Promise<{ id: string; email: string | null }[]> {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const { data, error } = await admin
     .from("profiles")
     .select("id, email")
@@ -132,10 +134,10 @@ export async function getHeadmastersForInstitution(
  * Avoid duplicate cron emails: insert dedupe row first; returns false if already sent.
  */
 export async function tryClaimEmailDedupe(dedupeKey: string): Promise<boolean> {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const { error } = await admin.from("email_dispatch_log").insert({ dedupe_key: dedupeKey });
   if (error) {
-    if (error.code === "23505" || error.message?.includes("duplicate")) {
+    if (/already exists|duplicate/i.test(error.message ?? "")) {
       return false;
     }
     console.error("[notify] dedupe insert", error.message);

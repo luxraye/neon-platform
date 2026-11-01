@@ -1,25 +1,25 @@
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { PageHeader } from "@/components/ui/page";
+import { getDb } from "@/lib/server/db";
 import { AdminBillingContent } from "./admin-billing-content";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminBillingPage() {
-  const admin = createServiceRoleClient();
+  const admin = getDb();
 
   const { data: institutions } = await admin
     .from("institutions")
     .select("id, name, subscription_tier")
     .order("name");
 
-  const institutionIds = (institutions ?? []).map((i) => i.id);
+  const { data: students } = await admin
+    .from("profiles")
+    .select("institution_id")
+    .eq("role", "student")
+    .is("deleted_at", null);
   const studentCounts: Record<string, number> = {};
-  for (const id of institutionIds) {
-    const { count } = await admin
-      .from("profiles")
-      .select("*", { count: "exact", head: true })
-      .eq("institution_id", id)
-      .eq("role", "student");
-    studentCounts[id] = count ?? 0;
+  for (const s of (students ?? []) as { institution_id: string | null }[]) {
+    if (s.institution_id) studentCounts[s.institution_id] = (studentCounts[s.institution_id] ?? 0) + 1;
   }
 
   const { data: reports } = await admin
@@ -32,10 +32,7 @@ export default async function AdminBillingPage() {
 
   return (
     <div className="space-y-6">
-      <div>
-        <h1 className="text-2xl font-semibold">Billing</h1>
-        <p className="text-muted-foreground text-sm">Base tier fees and per-student billing</p>
-      </div>
+      <PageHeader title="Billing" description="Monthly invoices for each centre, based on plan and active students." />
       <AdminBillingContent
         institutions={institutions ?? []}
         studentCounts={studentCounts}

@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { createServiceRoleClient } from "@/utils/supabase/admin";
+import { getDb } from "@/lib/server/db";
 import {
   getHeadmastersForInstitution,
   getStudentsForMaterialAudience,
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
 
-  const admin = createServiceRoleClient();
+  const admin = getDb();
   const today = new Date();
   const y = today.getUTCFullYear();
   const m = String(today.getUTCMonth() + 1).padStart(2, "0");
@@ -87,7 +87,12 @@ export async function GET(request: Request) {
       const instId = q.institution_id as string;
       const students = await getStudentsForMaterialAudience(instId, cohortId);
       const title = q.title as string;
-      const dueAt = q.due_at as string;
+      const dueAt = new Date(q.due_at as string).toLocaleDateString("en-GB", {
+        weekday: "long",
+        day: "numeric",
+        month: "long",
+        timeZone: process.env.APP_TIMEZONE || "Africa/Gaborone",
+      });
       for (const s of students) {
         const dedupe = `quiz-due:${q.id}:${s.id}:${dateKey}`;
         const claimed = await tryClaimEmailDedupe(dedupe);

@@ -1,50 +1,37 @@
 import { redirect } from "next/navigation";
-import { getUserIdentity } from "@/utils/supabase/get-user-identity";
+import { getUserIdentity } from "@/lib/auth/identity";
 
 export const dynamic = "force-dynamic";
 
 type InstRole = "student" | "tutor" | "headmaster";
-const MAP: Record<string, Partial<Record<InstRole, string>>> = {
-  staff: { headmaster: "/headmaster/staff" },
-  cohorts: { headmaster: "/headmaster/cohorts", tutor: "/tutor/cohorts" },
-  payments: { headmaster: "/headmaster/payments" },
-  settings: {
-    headmaster: "/headmaster/settings",
-    student: "/student/settings",
-    tutor: "/tutor/settings",
-  },
-  "settings/profile": {
-    headmaster: "/headmaster/settings",
-    student: "/student/settings/profile",
-    tutor: "/tutor/settings",
-  },
-  learn: { student: "/student/learn" },
-  "mobile-setup": { student: "/student/mobile-setup" },
-  timetable: { student: "/student/timetable", tutor: "/tutor/timetable", headmaster: "/headmaster" },
-  community: { student: "/student/community", tutor: "/tutor/community", headmaster: "/headmaster" },
-  attendance: { tutor: "/tutor/attendance", headmaster: "/headmaster" },
-  materials: { tutor: "/tutor/subjects", headmaster: "/headmaster" },
-  quizzes: { tutor: "/tutor/quizzes", headmaster: "/headmaster" },
+
+/** Pages each role actually has, relative to its root (e.g. /tutor). */
+const ROUTES: Record<InstRole, string[]> = {
+  headmaster: ["cohorts", "payments", "pricing", "reports", "results", "settings", "staff", "timetable"],
+  tutor: ["attendance", "cohorts", "community", "materials", "quizzes", "quizzes/new", "reports", "results", "settings", "subjects", "timetable"],
+  student: ["community", "learn", "mobile-setup", "results", "settings", "timetable"],
 };
 
-/** Legacy `/dashboard/*` URLs → role-isolated routes (no shared dashboard layout). */
-export default async function DashboardLegacyRedirect({
-  params,
-}: {
-  params: Promise<{ rest: string[] }>;
-}) {
-  const { rest } = await params;
-  const first = rest?.[0] ?? "";
-  const pathKey = rest?.length === 2 ? `${rest[0]}/${rest[1]}` : first;
+/** Old names that moved. */
+const ALIASES: Record<string, string> = {
+  "settings/profile": "settings",
+  "learn/progress": "results",
+  profile: "settings",
+};
 
+/** Legacy `/dashboard/*` links go to the same page under the user's own role, or their home. */
+export default async function DashboardLegacyRedirect({ params }: { params: Promise<{ rest: string[] }> }) {
+  const { rest } = await params;
   const identity = await getUserIdentity();
   if (!identity) redirect("/login");
+  if (identity.role === "admin") redirect("/admin");
 
-  const role = identity.role as "admin" | InstRole | undefined;
+  const role = identity.role as InstRole;
+  if (!ROUTES[role]) redirect("/login");
 
-  if (role === "admin") redirect("/admin");
-  if (role !== "student" && role !== "tutor" && role !== "headmaster") redirect("/dashboard");
-
-  const mapped = MAP[pathKey]?.[role as InstRole] ?? MAP[first]?.[role as InstRole];
-  redirect(mapped ?? "/dashboard");
+  const raw = (rest ?? []).join("/");
+  const path = ALIASES[raw] ?? raw;
+  if (ROUTES[role].includes(path)) redirect(`/${role}/${path}`);
+  if (path.startsWith("community/") && ROUTES[role].includes("community")) redirect(`/${role}/${path}`);
+  redirect(`/${role}`);
 }
